@@ -1,0 +1,868 @@
+{
+  "error_envelope": {
+    "error": {
+      "code": "USAGE",
+      "details": {},
+      "message": "example"
+    },
+    "schema_version": "1.0"
+  },
+  "models": {
+    "Artifact": {
+      "description": "Raw downloaded content, before validation/extraction/output placement.",
+      "properties": {
+        "content": {
+          "format": "binary",
+          "title": "Content",
+          "type": "string"
+        },
+        "downloader": {
+          "title": "Downloader",
+          "type": "string"
+        },
+        "format": {
+          "enum": [
+            "pdf",
+            "xml",
+            "text"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "license": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "License"
+        },
+        "source_url": {
+          "title": "Source Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "content",
+        "source_url",
+        "downloader"
+      ],
+      "title": "Artifact",
+      "type": "object"
+    },
+    "Author": {
+      "properties": {
+        "affiliation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Affiliation"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "orcid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Orcid"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Author",
+      "type": "object"
+    },
+    "FullText": {
+      "$defs": {
+        "Author": {
+          "properties": {
+            "affiliation": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Affiliation"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "orcid": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Orcid"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "title": "Author",
+          "type": "object"
+        },
+        "Paper": {
+          "properties": {
+            "abstract": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Abstract"
+            },
+            "authors": {
+              "items": {
+                "$ref": "#/$defs/Author"
+              },
+              "title": "Authors",
+              "type": "array"
+            },
+            "identifiers": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "title": "Identifiers",
+              "type": "object"
+            },
+            "journal": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Journal"
+            },
+            "license": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "License"
+            },
+            "oa_status": {
+              "default": "unknown",
+              "enum": [
+                "gold",
+                "green",
+                "hybrid",
+                "bronze",
+                "closed",
+                "unknown"
+              ],
+              "title": "Oa Status",
+              "type": "string"
+            },
+            "publication_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Publication Type"
+            },
+            "publisher_url": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Publisher Url"
+            },
+            "sources": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Sources",
+              "type": "array"
+            },
+            "title": {
+              "default": "",
+              "title": "Title",
+              "type": "string"
+            },
+            "year": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Year"
+            }
+          },
+          "title": "Paper",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "downloader": {
+          "title": "Downloader",
+          "type": "string"
+        },
+        "extracted_from": {
+          "anyOf": [
+            {
+              "enum": [
+                "pdf",
+                "xml"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Extracted From"
+        },
+        "extractor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Extractor"
+        },
+        "format": {
+          "enum": [
+            "pdf",
+            "xml",
+            "text"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "license": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "License"
+        },
+        "paper": {
+          "$ref": "#/$defs/Paper"
+        },
+        "path": {
+          "format": "path",
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        },
+        "source_url": {
+          "title": "Source Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "paper",
+        "format",
+        "path",
+        "sha256",
+        "source_url",
+        "downloader"
+      ],
+      "title": "FullText",
+      "type": "object"
+    },
+    "FullTextCandidate": {
+      "properties": {
+        "format": {
+          "enum": [
+            "pdf",
+            "xml",
+            "text",
+            "landing"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "license": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "License"
+        },
+        "locator": {
+          "title": "Locator",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "format",
+        "locator"
+      ],
+      "title": "FullTextCandidate",
+      "type": "object"
+    },
+    "Identifier": {
+      "properties": {
+        "kind": {
+          "enum": [
+            "doi",
+            "pmid",
+            "pmcid",
+            "openalex",
+            "s2",
+            "arxiv",
+            "url"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "Identifier",
+      "type": "object"
+    },
+    "Paper": {
+      "$defs": {
+        "Author": {
+          "properties": {
+            "affiliation": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Affiliation"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "orcid": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Orcid"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "title": "Author",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "abstract": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Abstract"
+        },
+        "authors": {
+          "items": {
+            "$ref": "#/$defs/Author"
+          },
+          "title": "Authors",
+          "type": "array"
+        },
+        "identifiers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Identifiers",
+          "type": "object"
+        },
+        "journal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Journal"
+        },
+        "license": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "License"
+        },
+        "oa_status": {
+          "default": "unknown",
+          "enum": [
+            "gold",
+            "green",
+            "hybrid",
+            "bronze",
+            "closed",
+            "unknown"
+          ],
+          "title": "Oa Status",
+          "type": "string"
+        },
+        "publication_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Publication Type"
+        },
+        "publisher_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Publisher Url"
+        },
+        "sources": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Sources",
+          "type": "array"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        },
+        "year": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Year"
+        }
+      },
+      "title": "Paper",
+      "type": "object"
+    },
+    "Query": {
+      "properties": {
+        "author": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Author"
+        },
+        "journal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Journal"
+        },
+        "open_access": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Open Access"
+        },
+        "raw": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Raw"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "year_from": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Year From"
+        },
+        "year_to": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Year To"
+        }
+      },
+      "title": "Query",
+      "type": "object"
+    },
+    "SearchPage": {
+      "$defs": {
+        "Author": {
+          "properties": {
+            "affiliation": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Affiliation"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "orcid": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Orcid"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "title": "Author",
+          "type": "object"
+        },
+        "Paper": {
+          "properties": {
+            "abstract": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Abstract"
+            },
+            "authors": {
+              "items": {
+                "$ref": "#/$defs/Author"
+              },
+              "title": "Authors",
+              "type": "array"
+            },
+            "identifiers": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "title": "Identifiers",
+              "type": "object"
+            },
+            "journal": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Journal"
+            },
+            "license": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "License"
+            },
+            "oa_status": {
+              "default": "unknown",
+              "enum": [
+                "gold",
+                "green",
+                "hybrid",
+                "bronze",
+                "closed",
+                "unknown"
+              ],
+              "title": "Oa Status",
+              "type": "string"
+            },
+            "publication_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Publication Type"
+            },
+            "publisher_url": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Publisher Url"
+            },
+            "sources": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Sources",
+              "type": "array"
+            },
+            "title": {
+              "default": "",
+              "title": "Title",
+              "type": "string"
+            },
+            "year": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Year"
+            }
+          },
+          "title": "Paper",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/Paper"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "next_cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next Cursor"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "total": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "SearchPage",
+      "type": "object"
+    }
+  },
+  "schema_version": "1.0",
+  "success_envelope": {
+    "command": "cmd",
+    "data": {},
+    "schema_version": "1.0",
+    "warnings": []
+  }
+}

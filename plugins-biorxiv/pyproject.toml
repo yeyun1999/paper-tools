@@ -1,0 +1,37 @@
+[project]
+name = "paper-search-biorxiv"
+version = "0.1.0"
+description = "bioRxiv/medRxiv metadata plugin for paper-search (official details API)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["paper-search"]
+
+[project.entry-points."paper_search.metadata"]
+biorxiv = "paper_search_biorxiv.metadata:BiorxivMetadata"
+
+[dependency-groups]
+dev = ["pytest>=8", "respx>=0.21", "ruff>=0.8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/paper_search_biorxiv"]
+
+# 本地开发：依赖同仓库的 paper-search 主包（editable）。
+# 主包发布 PyPI 后删除本段，改为普通版本约束。
+[tool.uv.sources]
+paper-search = { path = "../", editable = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["RUF002", "RUF003"]  # 中文文档字符串/注释允许全角标点

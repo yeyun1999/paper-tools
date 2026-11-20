@@ -1,0 +1,236 @@
+"""PubMed plugin: Searcher + MetadataProvider via NCBI E-utilities."""
+
+from __future__ import annotations
+
+import re
+from typing import Any
+
+from defusedxml.ElementTree import fromstring as safe_xml_fromstring
+
+from paper_search.core.errors import UpstreamError
+from paper_search.core.models import Author, Paper, SearchPage
+from paper_search.core.plugins import PluginContext, PluginMeta
+from paper_search.core.query import Query
+
+_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+ESEARCH = f"{_BASE}/esearch.fcgi"
+ESUMMARY = f"{_BASE}/esummary.fcgi"
+EFETCH = f"{_BASE}/efetch.fcgi"
+_HOST = "eutils.ncbi.nlm.nih.gov"
+
+_SEARCH_TTL = 3600
+_METADATA_TTL = 7 * 86400
+
+
+def translate_query(q: Query) -> str:
+    """Unified Query -> PubMed term syntax."""
+    if q.raw is not None:
+        return q.raw
+    parts: list[str] = []
+    if q.text:
+        parts.append(q.text)
+    if q.title:
+        parts.append(f"{q.title}[Title]")
+    if q.author:
+        parts.append(f"{q.author}[Author]")
+    if q.journal:
+        parts.append(f"{q.journal}[Journal]")
+    if q.year_from is not None or q.year_to is not None:
+        lo = q.year_from if q.year_from is not None else 1900
+        hi = q.year_to if q.year_to is not None else 3000
+        parts.append(f"{lo}:{hi}[dp]")
+    if q.open_access:
+        parts.append("free full text[sb]")
+    return " AND ".join(parts)
+
+
+def _strip_tags(text: str) -> str:
+    return re.sub(r"<[^>]+>", "", text).strip()
+
+
+def _year_from(text: str | None) -> int | None:
+    if not text:
+        return None
+    match = re.search(r"\d{4}", text)
+    return int(match.group()) if match else None
+
+
+class _PubMedBase:
+    def __init__(self, ctx: PluginContext) -> None:
+        self.ctx = ctx
+        plugin_cfg = ctx.config.plugin_config("pubmed")
+        self._common: dict[str, Any] = {"tool": "paper-search"}
+        if ctx.config.general.mailto:
+            self._common["email"] = ctx.config.general.mailto
+        api_key = plugin_cfg.get("api_key")
+        if api_key:
+            self._common["api_key"] = api_key
+            ctx.http.set_rate_limit(_HOST, 10.0)
+
+    def _esearch_pmids(self, term: str) -> list[str]:
+        data = self.ctx.http.get_json(
+            ESEARCH,
+            params={**self._common, "db": "pubmed", "term": term, "retmax": 1, "retmode": "json"},
+            cache_ttl=_SEARCH_TTL,
+        )
+        result = data.get("esearchresult", {})
+        if "ERROR" in result:
+            raise UpstreamError(f"PubMed esearch error: {result['ERROR']}", source="pubmed")
+        return list(result.get("idlist", []))
+
+
+class PubMedSearcher(_PubMedBase):
+    meta = PluginMeta(name="pubmed", version="0.1.0", description="PubMed via NCBI E-utilities")
+
+    def search(self, q: Query, *, limit: int = 20, cursor: str | None = None) -> SearchPage:
+        retstart = int(cursor) if cursor else 0
+        data = self.ctx.http.get_json(
+            ESEARCH,
+            params={
+                **self._common,
+                "db": "pubmed",
+                "term": translate_query(q),
+                "retmax": limit,
+                "retstart": retstart,
+                "retmode": "json",
+                "sort": "relevance",
+            },
+            cache_ttl=_SEARCH_TTL,
+        )
+        result = data.get("esearchresult", {})
+        if "ERROR" in result:
+            raise UpstreamError(f"PubMed esearch error: {result['ERROR']}", source="pubmed")
+        idlist = list(result.get("idlist", []))
+        total = int(result.get("count", 0))
+        items = self._summarize(idlist) if idlist else []
+        next_cursor = str(retstart + limit) if retstart + len(idlist) < total else None
+        return SearchPage(items=items, total=total, next_cursor=next_cursor, source="pubmed")
+
+    def _summarize(self, pmids: list[str]) -> list[Paper]:
+        data = self.ctx.http.get_json(
+            ESUMMARY,
+            params={**self._common, "db": "pubmed", "id": ",".join(pmids), "retmode": "json"},
+            cache_ttl=_SEARCH_TTL,
+        )
+        result = data.get("result", {})
+        papers: list[Paper] = []
+        for pmid in result.get("uids", pmids):
+            record = result.get(pmid, {})
+            if not record:
+                continue
+            identifiers = {"pmid": pmid}
+            for article_id in record.get("articleids", []):
+                idtype = article_id.get("idtype")
+                value = article_id.get("value")
+                if idtype == "doi" and value:
+                    identifiers["doi"] = value.lower()
+                elif idtype == "pmc" and value:
+                    identifiers["pmcid"] = value
+            papers.append(
+                Paper(
+                    title=_strip_tags(record.get("title", "")),
+                    identifiers=identifiers,
+                    authors=[
+                        Author(name=a["name"]) for a in record.get("authors", []) if a.get("name")
+                    ],
+                    year=_year_from(record.get("pubdate")),
+                    journal=record.get("fulljournalname") or record.get("source"),
+                    publication_type=(record.get("pubtype") or [None])[0],
+                )
+            )
+        return papers
+
+
+class PubMedMetadata(_PubMedBase):
+    meta = PluginMeta(name="pubmed", version="0.1.0", description="PubMed article metadata")
+    id_kinds = frozenset({"pmid", "doi", "pmcid"})
+
+    def enrich(self, paper: Paper) -> Paper:
+        pmid = paper.identifiers.get("pmid")
+        if not pmid:
+            doi = paper.identifiers.get("doi")
+            pmcid = paper.identifiers.get("pmcid")
+            if doi:
+                term = f"{doi}[AID]"
+            elif pmcid:
+                term = f"{pmcid}[PMCID]"
+            else:
+                return paper
+            pmids = self._esearch_pmids(term)
+            if not pmids:
+                return paper
+            pmid = pmids[0]
+        response = self.ctx.http.request(
+            "GET",
+            EFETCH,
+            params={
+                **self._common,
+                "db": "pubmed",
+                "id": pmid,
+                "rettype": "abstract",
+                "retmode": "xml",
+            },
+            cache_ttl=_METADATA_TTL,
+        )
+        return _parse_efetch(response.content, paper)
+
+
+def _text(element: Any) -> str:
+    return "".join(element.itertext()).strip() if element is not None else ""
+
+
+def _parse_efetch(content: bytes, original: Paper) -> Paper:
+    root = safe_xml_fromstring(content)
+    article = root.find(".//PubmedArticle")
+    if article is None:
+        return original
+    medline = article.find("MedlineCitation")
+    art = article.find("MedlineCitation/Article")
+    if medline is None or art is None:
+        return original
+
+    identifiers = dict(original.identifiers)
+    pmid = medline.findtext("PMID")
+    if pmid:
+        identifiers["pmid"] = pmid
+    for eloc in art.findall("ELocationID"):
+        if eloc.get("EIdType") == "doi" and eloc.text:
+            identifiers["doi"] = eloc.text.strip().lower()
+    for aid in article.findall("PubmedData/ArticleIdList/ArticleId"):
+        id_type = aid.get("IdType")
+        if id_type == "doi" and aid.text:
+            identifiers.setdefault("doi", aid.text.strip().lower())
+        elif id_type == "pmc" and aid.text:
+            identifiers["pmcid"] = aid.text.strip()
+
+    abstract_parts: list[str] = []
+    for abstract in art.findall("Abstract/AbstractText"):
+        text = _text(abstract)
+        label = abstract.get("Label")
+        abstract_parts.append(f"{label}: {text}" if label else text)
+
+    authors: list[Author] = []
+    for author in art.findall("AuthorList/Author"):
+        last = author.findtext("LastName")
+        fore = author.findtext("ForeName")
+        collective = author.findtext("CollectiveName")
+        name = f"{fore} {last}".strip() if last else (collective or "")
+        if name:
+            authors.append(Author(name=name))
+
+    pub_date = art.find("Journal/JournalIssue/PubDate")
+    year = None
+    if pub_date is not None:
+        year = _year_from(pub_date.findtext("Year") or pub_date.findtext("MedlineDate"))
+
+    pub_types = [_text(pt) for pt in art.findall("PublicationTypeList/PublicationType")]
+
+    return Paper(
+        title=_text(art.find("ArticleTitle")),
+        identifiers=identifiers,
+        authors=authors,
+        year=year,
+        journal=art.findtext("Journal/Title"),
+        abstract="\n".join(abstract_parts) if abstract_parts else None,
+        publication_type=pub_types[0] if pub_types else None,
+    )

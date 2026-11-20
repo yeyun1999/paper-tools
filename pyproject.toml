@@ -1,0 +1,94 @@
+[project]
+name = "paper-search"
+version = "0.1.0"
+description = "Literature search and open-access full-text retrieval CLI for biomedical researchers and AI assistants"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.12",
+    "rich>=13.7",
+    "pydantic>=2.7",
+    "httpx>=0.27",
+    "diskcache>=5.6",
+    "platformdirs>=4.2",
+    "tomli-w>=1.0",
+    "defusedxml>=0.7.1",
+]
+
+[project.optional-dependencies]
+text = ["pypdf>=4.2"]
+mcp = [
+    "mcp>=2.0",
+]
+
+[project.scripts]
+paper-search = "paper_search.cli.app:main"
+
+[project.entry-points."paper_search.searchers"]
+pubmed = "paper_search.plugins.pubmed:PubMedSearcher"
+europepmc = "paper_search.plugins.europepmc:EuropePmcSearcher"
+crossref = "paper_search.plugins.crossref:CrossrefSearcher"
+openalex = "paper_search.plugins.openalex:OpenAlexSearcher"
+semantic_scholar = "paper_search.plugins.semantic_scholar:SemanticScholarSearcher"
+
+[project.entry-points."paper_search.metadata"]
+pubmed = "paper_search.plugins.pubmed:PubMedMetadata"
+europepmc = "paper_search.plugins.europepmc:EuropePmcMetadata"
+unpaywall = "paper_search.plugins.unpaywall:UnpaywallMetadata"
+crossref = "paper_search.plugins.crossref:CrossrefMetadata"
+openalex = "paper_search.plugins.openalex:OpenAlexMetadata"
+semantic_scholar = "paper_search.plugins.semantic_scholar:SemanticScholarMetadata"
+
+[project.entry-points."paper_search.locators"]
+europepmc = "paper_search.plugins.europepmc:EuropePmcLocator"
+pmc_oa = "paper_search.plugins.pmc_oa:PmcOaLocator"
+unpaywall = "paper_search.plugins.unpaywall:UnpaywallLocator"
+openalex = "paper_search.plugins.openalex:OpenAlexLocator"
+
+[project.entry-points."paper_search.downloaders"]
+europepmc = "paper_search.plugins.europepmc:EuropePmcDownloader"
+pmc_oa = "paper_search.plugins.pmc_oa:PmcOaDownloader"
+http_direct = "paper_search.plugins.http_direct:HttpDirectDownloader"
+
+[project.entry-points."paper_search.extractors"]
+jats = "paper_search.plugins.jats:JatsExtractor"
+pypdf = "paper_search.plugins.pypdf_extractor:PypdfExtractor"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "pytest>=8.2",
+    "respx>=0.21",
+    "types-defusedxml>=0.7.0.20260504",
+]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/paper_search"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src"]
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["diskcache.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-m 'not live'"
+markers = ["live: real upstream API smoke tests (run with -m live)"]
