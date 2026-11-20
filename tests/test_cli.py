@@ -68,13 +68,43 @@ def test_get_json(cli: CliRunner) -> None:
 def test_get_not_found(cli: CliRunner) -> None:
     result = cli.invoke(app, ["get", "doi:10.1000/missing", "--json"])
     assert result.exit_code == 3
-    assert json.loads(result.stderr)["error"]["code"] == "NOT_FOUND"
-    assert result.stdout == ""
+    # per-ID errors live in the stdout result stream (aligned with fetch)
+    assert json.loads(result.stdout)["error"]["code"] == "NOT_FOUND"
 
 
 def test_get_invalid_identifier(cli: CliRunner) -> None:
     result = cli.invoke(app, ["get", "not-an-id", "--json"])
     assert result.exit_code == 2
+    assert json.loads(result.stdout)["error"]["code"] == "USAGE"
+
+
+def test_get_batch_ndjson(cli: CliRunner) -> None:
+    result = cli.invoke(
+        app,
+        ["get", "doi:10.1000/fake1", "doi:10.1000/missing", "pmid:111", "--json"],
+    )
+    assert result.exit_code == 3  # first per-ID failure (NOT_FOUND)
+    lines = result.stdout.strip().splitlines()
+    assert len(lines) == 3
+    first, second, third = (json.loads(line) for line in lines)
+    assert first["data"]["abstract"]
+    assert second["error"]["code"] == "NOT_FOUND"
+    assert third["data"]["identifiers"]["pmid"] == "111"
+
+
+def test_get_batch_fields_projection(cli: CliRunner) -> None:
+    result = cli.invoke(
+        app, ["get", "doi:10.1000/fake1", "doi:10.1000/fake2", "--fields", "title,doi", "--json"]
+    )
+    assert result.exit_code == 0
+    for line in result.stdout.strip().splitlines():
+        assert set(json.loads(line)["data"]) == {"title", "doi"}
+
+
+def test_get_single_stays_single_object(cli: CliRunner) -> None:
+    result = cli.invoke(app, ["get", "doi:10.1000/fake1", "--json"])
+    payload = json.loads(result.stdout)  # would raise on NDJSON
+    assert payload["command"] == "get"
 
 
 def test_fetch_pdf_json(cli: CliRunner, tmp_path: Path) -> None:

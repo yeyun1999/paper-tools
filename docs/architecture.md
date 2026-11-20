@@ -377,7 +377,7 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 | 命令 | 功能 | 关键选项 |
 |---|---|---|
 | `search QUERY` | 检索（返回浅记录） | `--source`（可重复/逗号分隔/`all`，多源并发+去重；默认 `general.default_source`）、`--limit`、`--cursor`（多源时为 JSON 聚合游标）、`--author`、`--journal`、`--year-from/--year-to`、`--oa-only`、`--raw`、`--fields`、`--enrich`（走补全链） |
-| `get ID` | 按标识符取完整元数据（stub → 补全链） | `--source`（可选，限定补全来源） |
+| `get ID...` | 按标识符取完整元数据（stub → 补全链），支持多个 ID 批量 | `--source`（可选，限定补全来源）、`--fields`；批量 `--json` 为 NDJSON，逐 ID 错误进 stdout 结果流，退出码取首个失败 |
 | `fetch ID...` | 获取全文，支持多个 ID | `--format pdf\|xml\|text`、`--out DIR`、`--locator`（可重复指定或逗号分隔，限定定位器；`all` 强制全部；默认取 `fetch.locators` 配置，空则全部）、`--downloader`（强制指定）、`--extractor`（text 时强制指定） |
 | `sources` | 列出全部已注册插件（按五类角色分组）与关键属性 | |
 | `config get\|set\|list\|path` | 配置管理 | 点分键，如 `plugins.unpaywall.email` |
@@ -414,7 +414,7 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 ```
 
 - 批量 `fetch` 的 `--json` 输出为 NDJSON（每 ID 一行结果或错误），便于流式处理。
-- `fetch` 的逐 ID 错误（如全文不可得）作为结果信封写入 **stdout** 结果流（单个 ID 时为单对象），与 NDJSON 批量保持一致；进程级错误（用法/配置）才走 stderr。退出码取第一个失败的逐 ID 错误码。
+- `fetch` / `get` 的逐 ID 错误（如全文不可得、元数据未找到）作为结果信封写入 **stdout** 结果流（单个 ID 时为单对象），与 NDJSON 批量保持一致；进程级错误（用法/配置）才走 stderr。退出码取第一个失败的逐 ID 错误码。
 - `--fields` 裁剪 Paper 字段（如 `--fields title,doi,year`），降低 AI 上下文占用。
 - 补全冲突、提取质量提示等以 `warnings` 数组随成功结果返回，不污染 data。
 

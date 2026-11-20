@@ -1,12 +1,13 @@
-"""get command: full metadata via the enrichment chain."""
+"""get command: full metadata via the enrichment chain (single or batch)."""
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 
 from paper_search.cli import context, render
+from paper_search.core.errors import PaperSearchError
 from paper_search.core.models import Paper, parse_identifier
 from paper_search.core.plugins import available_names
 
@@ -21,10 +22,13 @@ def register(app: typer.Typer) -> None:
     @app.command()
     def get(
         ctx: typer.Context,
-        identifier: Annotated[
-            str,
+        identifiers: Annotated[
+            list[str],
             typer.Argument(
-                help="doi:/pmid:/pmcid:/openalex:/s2:/arxiv: ID, DOI URL, bare DOI, or PMID digits."
+                help=(
+                    "One or more IDs (doi:/pmid:/pmcid:/openalex:/s2:/arxiv:, DOI URL, "
+                    "bare DOI, or PMID digits), processed independently."
+                )
             ),
         ],
         source: Annotated[
@@ -39,19 +43,38 @@ def register(app: typer.Typer) -> None:
             ),
         ] = None,
     ) -> None:
-        """Fetch complete metadata for one paper."""
+        """Fetch complete metadata for one or more papers. Batch output is NDJSON with --json."""
         opts = ctx.obj
         with render.error_guard(opts, "get"):
-            ident = parse_identifier(identifier)
-            stub = Paper(identifiers={ident.kind: ident.value})
             services = context.build_services(opts)
-            paper, warnings = services.metadata.enrich(stub, only_source=source)
-            warnings = services.registry.load_warnings + warnings
-            data = paper.model_dump(mode="json")
-            if fields:
-                data = render.filter_fields(data, fields)
+            payloads: list[dict[str, Any]] = []
+            exit_code = 0
+            for identifier in identifiers:
+                try:
+                    ident = parse_identifier(identifier)
+                    stub = Paper(identifiers={ident.kind: ident.value})
+                    paper, warnings = services.metadata.enrich(stub, only_source=source)
+                except PaperSearchError as exc:
+                    payloads.append(render.error_envelope(exc))
+                    if exit_code == 0:
+                        exit_code = exc.exit_code
+                    if not opts.json_output:
+                        render.err_console.print(
+                            f"[red]FAIL[/red] {identifier}: {exc.code}: {exc.message}"
+                        )
+                    continue
+                warnings = services.registry.load_warnings + warnings
+                data = paper.model_dump(mode="json")
+                if fields:
+                    data = render.filter_fields(data, fields)
+                payloads.append(render.success_envelope("get", data, warnings))
+                if not opts.json_output:
+                    render.render_paper(paper)
+                    render.show_warnings(warnings, opts)
             if opts.json_output:
-                render.emit_json(render.success_envelope("get", data, warnings))
-            else:
-                render.render_paper(paper)
-                render.show_warnings(warnings, opts)
+                if len(payloads) == 1:
+                    render.emit_json(payloads[0])
+                else:
+                    render.emit_ndjson(payloads)
+            if exit_code:
+                raise typer.Exit(exit_code)

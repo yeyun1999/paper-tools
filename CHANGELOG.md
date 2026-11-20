@@ -8,6 +8,10 @@ JSON 契约（`schema_version`）自 M5 起冻结为 **1.0**：任何字段变�
 
 ### 变更
 
+- **`get` 支持批量**：`get ID...` 逐篇补全，`--json` 多 ID 输出 NDJSON（单 ID 仍单对象），
+  `--fields` 逐条裁剪；MCP `get_paper` 保持单篇（客户端可并行调用）。
+  **契约调整**：`get` 的逐 ID 错误（含单 ID）从 stderr 移至 stdout 结果流，与 `fetch` 对齐；
+  进程级错误（用法/配置）仍走 stderr。
 - **定位阶段配置错误不再阻断 fetch**：Locator 的 `ConfigError`（如 Unpaywall 缺 email）
   降级为 warning 并跳过该定位器，其余定位器照常工作；补全链（`get`/`--enrich`）保持
   严格传播（退出码 5）。

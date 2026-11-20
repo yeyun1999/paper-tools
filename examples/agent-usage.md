@@ -44,6 +44,9 @@ uv run paper-search search "CRISPR base editing" --fields title,doi,year --json
 uv run paper-search get pmid:38308006 --json
 uv run paper-search get doi:10.1038/s41586-020-2649-2 --fields title,doi,abstract,oa_status --json
 
+# 批量元数据：多个 ID 一次进程，NDJSON 逐行输出（单 ID 仍为单对象）
+uv run paper-search get pmid:38308006 doi:10.1038/s41586-020-2649-2 --fields title,doi,year --json
+
 # OA 全文：pdf / xml / text（text 走 下载→提取 流水线，优先 XML）
 uv run paper-search fetch pmcid:PMC13434336 --format text --out papers/ --json
 uv run paper-search fetch doi:10.1093/nar/gkag769 --format pdf --json
@@ -90,7 +93,7 @@ uv run paper-search fetch doi:10.1001/jama.2020.2648 --format pdf --json
 
 ## 3. NDJSON 批量
 
-多 ID `fetch --json` 输出 NDJSON：每行一个独立 envelope（成功或错误），单 ID 失败不中断批次；进程退出码取第一个失败行的错误码。
+多 ID `fetch` / `get` 的 `--json` 输出 NDJSON：每行一个独立 envelope（成功或错误），单 ID 失败不中断批次；进程退出码取第一个失败行的错误码。单 ID 时输出单个 JSON 对象（向后兼容）。
 
 ```bash
 uv run paper-search fetch pmcid:PMC13434336 doi:10.1038/s41586-020-2649-2 doi:10.1001/jama.2020.2648 \

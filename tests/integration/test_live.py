@@ -189,6 +189,23 @@ def test_multi_source_search_live(live_services: Services) -> None:
     assert any(len(p.sources) >= 2 for p in page.items)  # merged across sources
 
 
+def test_get_batch_live() -> None:
+    import json
+
+    from typer.testing import CliRunner
+
+    from paper_search.cli.app import app
+
+    result = CliRunner().invoke(app, ["get", "pmid:38308006", _NUMPY_DOI, "--json"])
+    assert result.exit_code == 0, result.stdout
+    lines = result.stdout.strip().splitlines()
+    assert len(lines) == 2
+    for line in lines:
+        env = json.loads(line)
+        assert env["command"] == "get"
+        assert env["data"]["title"]
+
+
 def test_mcp_stdio_full_flow_live(tmp_path: Path) -> None:
     """Real `paper-search mcp` subprocess: search -> get -> fetch over stdio."""
     pytest.importorskip("mcp", reason="mcp extra not installed")
