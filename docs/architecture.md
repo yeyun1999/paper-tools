@@ -346,14 +346,22 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 
 ## 8. 服务编排
 
-### 8.1 MetadataService（补全链）
+### 8.1 SearchService（单源 / 多源聚合）
+
+1. **路由**：`sources` 为空取 `general.default_source`；单源时游标原样透传（行为与历史版本一致）。
+2. **多源并发**：多个源用线程池并发检索（各源独立 limit），失败源降级为 `warnings`，全部失败抛 `UpstreamError`（退出码 3）。
+3. **去重合并**：主键 DOI → 兜底 PMID → 再兜底规范化标题指纹；重复条目走 `merge_papers`（fill-missing、identifiers 并集、sources 记录贡献源、冲突告警）。去重仅在**页内**（跨页无状态）。
+4. **排序**：各源相关性分数不可比，按源顺序轮转交错（round-robin），截断到 limit；`total` 为各源 total 之和（去重前，近似值）。
+5. **聚合游标**：`next_cursor` 为 JSON 对象 `{source: cursor}`；续传时不在对象中的源视为耗尽。失败但持有旧游标的源保留进度以便重试。单源游标仍是不透明字符串。
+
+### 8.2 MetadataService（补全链）
 
 1. **路由**：按 Paper 已有标识符与各 MetadataProvider 的 `id_kinds` 匹配，按优先级排序（pubmed/europepmc > crossref > openalex > semantic_scholar > unpaywall）。
 2. **逐个 enrich**：fill-missing 合并——空字段填入、identifiers 并集、`sources` 追加贡献插件；已有字段冲突时不覆盖，记入 `warnings`。`ConfigError`（如 Unpaywall 缺 email）不降级为告警，直接传播为退出码 5。
 3. **终止条件**：`get` 场景取到 title + 摘要即可提前停止（可配置）；`search --enrich` 场景对每条结果跑链，命中缓存则跳过网络。
 4. **缓存**：补全结果按标识符缓存 7d；`--no-cache` 绕过。
 
-### 8.2 FetchService（定位 → 下载 → 提取）
+### 8.3 FetchService（定位 → 下载 → 提取）
 
 1. **收集**：调用所有 Locator 的 `resolve(paper)`，汇总候选（首版串行即可）；Locator 的 `ConfigError`/上游错误降级为 `warnings` 并跳过该定位器（单个定位器缺配置不阻断 fetch，如未配 Unpaywall email 仍可用其余定位器）。补全链的 `ConfigError` 则保持严格传播（退出码 5）。
 2. **去重排序**：按 URL+格式 去重（同一 tar.gz 可同时产出 XML 与 PDF 候选）；排序键 = 格式匹配度 > 来源可信度（europepmc/pmc_oa 直链 > unpaywall 出版商直链 > 其他）> license 明确度。
@@ -368,7 +376,7 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 
 | 命令 | 功能 | 关键选项 |
 |---|---|---|
-| `search QUERY` | 检索（返回浅记录） | `--source`（默认 pubmed，首版单源）、`--limit`、`--cursor`、`--author`、`--journal`、`--year-from/--year-to`、`--oa-only`、`--raw`、`--fields`、`--enrich`（走补全链） |
+| `search QUERY` | 检索（返回浅记录） | `--source`（可重复/逗号分隔/`all`，多源并发+去重；默认 `general.default_source`）、`--limit`、`--cursor`（多源时为 JSON 聚合游标）、`--author`、`--journal`、`--year-from/--year-to`、`--oa-only`、`--raw`、`--fields`、`--enrich`（走补全链） |
 | `get ID` | 按标识符取完整元数据（stub → 补全链） | `--source`（可选，限定补全来源） |
 | `fetch ID...` | 获取全文，支持多个 ID | `--format pdf\|xml\|text`、`--out DIR`、`--locator`（可重复指定或逗号分隔，限定定位器；`all` 强制全部；默认取 `fetch.locators` 配置，空则全部）、`--downloader`（强制指定）、`--extractor`（text 时强制指定） |
 | `sources` | 列出全部已注册插件（按五类角色分组）与关键属性 | |

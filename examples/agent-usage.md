@@ -33,6 +33,10 @@ uv run paper-search config set fetch.locators '["pmc_oa","europepmc"]'
 uv run paper-search search "CRISPR base editing" --source pubmed --limit 10 --json
 uv run paper-search search "CRISPR base editing" --source europepmc --oa-only --enrich --json
 
+# 多源聚合：并发检索 + DOI 主键去重合并（identifiers 并集、sources 记录贡献源）
+uv run paper-search search "CRISPR base editing" --source pubmed,europepmc --limit 10 --json
+uv run paper-search search "Array programming with NumPy" --source all --json
+
 # 字段裁剪：只要标题/DOI/年份（identifiers 内的键会被提升）
 uv run paper-search search "CRISPR base editing" --fields title,doi,year --json
 
@@ -44,7 +48,8 @@ uv run paper-search get doi:10.1038/s41586-020-2649-2 --fields title,doi,abstrac
 uv run paper-search fetch pmcid:PMC13434336 --format text --out papers/ --json
 uv run paper-search fetch doi:10.1093/nar/gkag769 --format pdf --json
 
-# 分页：取 next_cursor 续传
+# 分页：取 next_cursor 续传（多源时 next_cursor 是 JSON 聚合游标，原样回传即可；
+# 单源游标是不透明字符串。多源 total 为去重前各源之和，近似值）
 uv run paper-search search "CRISPR" --limit 20 --json          # data.next_cursor
 uv run paper-search search "CRISPR" --limit 20 --cursor "<next_cursor>" --json
 
@@ -147,7 +152,7 @@ uv sync --extra mcp
 
 | 工具 | 关键入参 | 返回 data |
 |---|---|---|
-| `search_papers` | query, source, limit, cursor, author, journal, year_from/year_to, oa_only, raw, enrich | SearchPage |
+| `search_papers` | query, source（逗号分隔多个或 `all`，多源去重）, limit, cursor, author, journal, year_from/year_to, oa_only, raw, enrich | SearchPage |
 | `get_paper` | identifier（doi:/pmid:/pmcid:/openalex:/s2:/arxiv: 或裸 DOI）, source | Paper |
 | `fetch_fulltext` | identifier, format(pdf\|xml\|text), out_dir, locator（逗号分隔多个）/downloader/extractor | FullText（含本地路径） |
 | `list_sources` | — | 五角色插件清单 |

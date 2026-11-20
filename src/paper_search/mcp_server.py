@@ -77,7 +77,10 @@ def build_server(opts: GlobalOpts | None = None) -> MCPServer[Any]:
         source: Annotated[
             str | None,
             Field(
-                description="Search plugin: pubmed|europepmc|crossref|openalex|semantic_scholar."
+                description=(
+                    "Search plugin(s), comma-separated; 'all' searches every source "
+                    "with dedup (default: general.default_source)."
+                )
             ),
         ] = None,
         limit: Annotated[int, Field(ge=1, le=100, description="Max results (1-100).")] = 20,
@@ -107,8 +110,13 @@ def build_server(opts: GlobalOpts | None = None) -> MCPServer[Any]:
                 )
             except ValidationError as exc:
                 raise UsageError(str(exc)) from exc
+            source_names = (
+                [name.strip() for name in source.split(",") if name.strip()] if source else None
+            )
+            if source_names is not None and "all" in source_names:
+                source_names = services.registry.names("searcher")
             page, warnings = services.search.search(
-                q, source=source, limit=limit, cursor=cursor, enrich=enrich
+                q, sources=source_names, limit=limit, cursor=cursor, enrich=enrich
             )
         except PaperSearchError as exc:
             return _failure(exc)

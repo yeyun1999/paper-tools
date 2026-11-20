@@ -20,7 +20,8 @@ try:
 except ConfigError:
     _DEFAULT_SOURCE = AppConfig().general.default_source
 _SOURCE_HELP = (
-    f"Search plugin name (default: {_DEFAULT_SOURCE}). Available: "
+    "Search plugin(s); repeat the flag or comma-separate; 'all' searches every "
+    f"source with dedup (default: {_DEFAULT_SOURCE}). Available: "
     f"{', '.join(available_names('searcher')) or '(none)'}."
 )
 
@@ -34,7 +35,7 @@ def register(app: typer.Typer) -> None:
             typer.Argument(help="Free-text query (optional if structured filters are given)."),
         ] = None,
         source: Annotated[
-            str | None,
+            list[str] | None,
             typer.Option("--source", help=_SOURCE_HELP),
         ] = None,
         limit: Annotated[
@@ -94,8 +95,15 @@ def register(app: typer.Typer) -> None:
             except ValidationError as exc:
                 raise UsageError(str(exc)) from exc
             services = context.build_services(opts)
+            source_names = (
+                [name.strip() for item in source for name in item.split(",") if name.strip()]
+                if source
+                else None
+            )
+            if source_names is not None and "all" in source_names:
+                source_names = services.registry.names("searcher")
             page, warnings = services.search.search(
-                q, source=source, limit=limit, cursor=cursor, enrich=enrich
+                q, sources=source_names, limit=limit, cursor=cursor, enrich=enrich
             )
             warnings = services.registry.load_warnings + warnings
             data = page.model_dump(mode="json")

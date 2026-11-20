@@ -155,7 +155,7 @@ uv build && uv publish       # 发布
 - bioRxiv/medRxiv、arXiv q-bio 搜索插件（bioRxiv 已在 M6 作生态验证）
 - `extract` 命令：对本地 PDF/XML 文件直接跑 Extractor 流水线
 - GROBID / marker 深度全文解析（Extractor 插件，extra）
-- 多源聚合搜索与跨库排序
+- 多源聚合搜索与跨库排序（聚合+去重+聚合游标已实现；跨库相关性排序目前为轮转交错启发式）
 - 引用网络：citations / references 命令（OpenAlex/S2 数据）
 - 导出 BibTeX / CSL-JSON
 - 机构订阅场景：仅解析并展示机构访问链接，不获取内容

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -10,9 +11,10 @@ from paper_search.core.errors import (
     ConfigError,
     FullTextUnavailableError,
     NotFoundError,
+    UpstreamError,
     UsageError,
 )
-from paper_search.core.models import FullTextCandidate, Paper
+from paper_search.core.models import FullTextCandidate, Paper, SearchPage
 from paper_search.core.plugins import PluginMeta
 from paper_search.core.query import Query
 from paper_search.core.services import Services
@@ -26,7 +28,7 @@ def test_search_default_source(services: Services) -> None:
 
 def test_search_unknown_source(services: Services) -> None:
     with pytest.raises(UsageError):
-        services.search.search(Query(text="x"), source="nope")
+        services.search.search(Query(text="x"), sources=["nope"])
 
 
 def test_search_enrich(services: Services) -> None:
@@ -223,3 +225,123 @@ def test_fetch_locators_default_from_config(services: Services, tmp_path: Path) 
 def test_fetch_unknown_locator_usage_error(services: Services, tmp_path: Path) -> None:
     with pytest.raises(UsageError):
         services.fetch.fetch("doi:10.1000/fake1", out_dir=tmp_path, locators=["nope"])
+
+
+class StubSearcher:
+    def __init__(self, name: str, items: list[Paper], next_cursor: str | None = None) -> None:
+        self.meta = PluginMeta(name=name, version="0.1.0")
+        self._items = items
+        self._next = next_cursor
+        self.calls: list[str | None] = []
+
+    def search(self, q: Query, *, limit: int = 20, cursor: str | None = None) -> SearchPage:
+        self.calls.append(cursor)
+        return SearchPage(
+            items=self._items[:limit],
+            total=len(self._items),
+            next_cursor=self._next,
+            source=self.meta.name,
+        )
+
+
+class BrokenSearcher:
+    def __init__(self, name: str) -> None:
+        self.meta = PluginMeta(name=name, version="0.1.0")
+
+    def search(self, q: Query, *, limit: int = 20, cursor: str | None = None) -> SearchPage:
+        raise UpstreamError(f"{self.meta.name} down")
+
+
+def test_multi_source_dedup_merge_and_order(services: Services) -> None:
+    sa = StubSearcher(
+        "sa",
+        [
+            Paper(title="A", identifiers={"doi": "10.1000/x", "pmid": "1"}),
+            Paper(title="B", identifiers={"doi": "10.1000/y"}),
+        ],
+    )
+    sb = StubSearcher(
+        "sb",
+        [
+            Paper(title="A variant", identifiers={"doi": "10.1000/x", "pmcid": "PMC9"}, year=2024),
+            Paper(title="C", identifiers={"doi": "10.1000/z"}),
+        ],
+    )
+    services.registry.register("searcher", sa)
+    services.registry.register("searcher", sb)
+    page, warnings = services.search.search(Query(text="q"), sources=["sa", "sb"], limit=10)
+    assert page.source == "sa,sb"
+    assert page.total == 4  # pre-dedup sum
+    assert [p.title for p in page.items] == ["A", "B", "C"]  # round-robin, fill-missing
+    first = page.items[0]
+    assert first.identifiers == {"doi": "10.1000/x", "pmid": "1", "pmcid": "PMC9"}
+    assert first.year == 2024
+    assert set(first.sources) == {"sa", "sb"}
+    assert not warnings
+
+
+def test_multi_source_title_fingerprint_dedup(services: Services) -> None:
+    sa = StubSearcher("sa", [Paper(title="Hello  CRISPR World")])
+    sb = StubSearcher("sb", [Paper(title="hello crispr world", year=2020)])
+    services.registry.register("searcher", sa)
+    services.registry.register("searcher", sb)
+    page, _ = services.search.search(Query(text="q"), sources=["sa", "sb"])
+    assert len(page.items) == 1
+    assert page.items[0].year == 2020
+
+
+def test_multi_source_limit_truncates(services: Services) -> None:
+    sa = StubSearcher(
+        "sa", [Paper(title=f"P{i}", identifiers={"doi": f"10.1000/{i}"}) for i in range(5)]
+    )
+    services.registry.register("searcher", sa)
+    services.registry.register("searcher", StubSearcher("sb", []))
+    page, _ = services.search.search(Query(text="q"), sources=["sa", "sb"], limit=2)
+    assert len(page.items) == 2
+
+
+def test_multi_source_failure_degrades_to_warning(services: Services) -> None:
+    services.registry.register(
+        "searcher", StubSearcher("sa", [Paper(title="A", identifiers={"doi": "10.1000/x"})])
+    )
+    services.registry.register("searcher", BrokenSearcher("sb"))
+    page, warnings = services.search.search(Query(text="q"), sources=["sa", "sb"])
+    assert len(page.items) == 1
+    assert any(w.startswith("sb:") for w in warnings)
+
+
+def test_multi_source_all_fail_raises(services: Services) -> None:
+    services.registry.register("searcher", BrokenSearcher("sb1"))
+    services.registry.register("searcher", BrokenSearcher("sb2"))
+    with pytest.raises(UpstreamError):
+        services.search.search(Query(text="q"), sources=["sb1", "sb2"])
+
+
+def test_multi_source_cursor_roundtrip(services: Services) -> None:
+    sa = StubSearcher("sa", [Paper(title="A", identifiers={"doi": "10.1000/x"})], next_cursor="a1")
+    sb = StubSearcher("sb", [Paper(title="B", identifiers={"doi": "10.1000/y"})], next_cursor="b1")
+    services.registry.register("searcher", sa)
+    services.registry.register("searcher", sb)
+    page, _ = services.search.search(Query(text="q"), sources=["sa", "sb"])
+    assert page.next_cursor is not None
+    assert json.loads(page.next_cursor) == {"sa": "a1", "sb": "b1"}
+    services.search.search(Query(text="q"), sources=["sa", "sb"], cursor=page.next_cursor)
+    assert sa.calls[-1] == "a1"
+    assert sb.calls[-1] == "b1"
+    # a source absent from the aggregated cursor is exhausted and not queried
+    services.search.search(Query(text="q"), sources=["sa", "sb"], cursor='{"sa": "a2"}')
+    assert sa.calls[-1] == "a2"
+    assert sb.calls[-1] == "b1"  # unchanged
+
+
+def test_multi_source_invalid_cursor(services: Services) -> None:
+    services.registry.register("searcher", StubSearcher("sa", []))
+    services.registry.register("searcher", StubSearcher("sb", []))
+    with pytest.raises(UsageError):
+        services.search.search(Query(text="q"), sources=["sa", "sb"], cursor="plain-opaque")
+
+
+def test_single_source_cursor_stays_opaque(services: Services) -> None:
+    page, _ = services.search.search(Query(text="q"), sources=["fake"], cursor="c9")
+    assert page.next_cursor == "c9"  # FakeSearcher echoes the cursor; no JSON wrapping
+    assert page.source == "fake"

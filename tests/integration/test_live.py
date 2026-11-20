@@ -39,7 +39,7 @@ def live_services(tmp_path: Path) -> Services:
 
 def _oa_pmcid(services: Services, *, journal: str | None = None) -> str:
     page, _ = services.search.search(
-        Query(text="CRISPR", journal=journal, open_access=True), source="europepmc", limit=10
+        Query(text="CRISPR", journal=journal, open_access=True), sources=["europepmc"], limit=10
     )
     pmcid = next((p.identifiers["pmcid"] for p in page.items if p.identifiers.get("pmcid")), None)
     assert pmcid, "no OA PMC paper found in live search"
@@ -93,7 +93,7 @@ def test_fetch_pdf_live(live_services: Services, tmp_path: Path) -> None:
     # PLOS ONE is fully OA and in the PMC OA subset; individual papers may still
     # lack a retrievable PDF, so try a few candidates before failing.
     page, _ = live_services.search.search(
-        Query(text="CRISPR", journal="PLoS ONE", open_access=True), source="europepmc", limit=10
+        Query(text="CRISPR", journal="PLoS ONE", open_access=True), sources=["europepmc"], limit=10
     )
     pmcids = [p.identifiers["pmcid"] for p in page.items if p.identifiers.get("pmcid")][:3]
     assert pmcids, "no OA PLOS ONE paper with PMCID found"
@@ -121,7 +121,7 @@ def test_fetch_text_live(live_services: Services, tmp_path: Path) -> None:
 
 def test_unpaywall_enrich_live(live_services: Services) -> None:
     page, _ = live_services.search.search(
-        Query(text="CRISPR", journal="PLoS ONE", open_access=True), source="europepmc", limit=1
+        Query(text="CRISPR", journal="PLoS ONE", open_access=True), sources=["europepmc"], limit=1
     )
     doi = page.items[0].identifiers["doi"]
     paper = live_services.registry.get("metadata", "unpaywall").enrich(
@@ -174,6 +174,19 @@ def test_cross_source_doi_normalization_live(ctx: PluginContext) -> None:
     assert openalex.title
     assert crossref.identifiers["doi"] == openalex.identifiers["doi"] == _NUMPY_DOI
     assert openalex.identifiers.get("openalex", "").startswith("W")
+
+
+def test_multi_source_search_live(live_services: Services) -> None:
+    # A well-known paper indexed by both sources guarantees cross-source overlap.
+    page, _ = live_services.search.search(
+        Query(text="Array programming with NumPy"), sources=["pubmed", "europepmc"], limit=4
+    )
+    assert page.items
+    assert page.source == "pubmed,europepmc"
+    dois = [p.identifiers["doi"] for p in page.items if p.identifiers.get("doi")]
+    assert len(dois) == len(set(dois))  # deduped by DOI
+    assert all(p.sources for p in page.items)  # provenance recorded
+    assert any(len(p.sources) >= 2 for p in page.items)  # merged across sources
 
 
 def test_mcp_stdio_full_flow_live(tmp_path: Path) -> None:

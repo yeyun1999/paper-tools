@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
@@ -64,15 +65,19 @@ class SearchService:
         self,
         query: Query,
         *,
-        source: str | None = None,
+        sources: list[str] | None = None,
         limit: int = 20,
         cursor: str | None = None,
         enrich: bool = False,
     ) -> tuple[SearchPage, list[str]]:
-        name = source or self._config.general.default_source
-        searcher = cast(Searcher, self._registry.get("searcher", name))
-        page = searcher.search(query, limit=limit, cursor=cursor)
-        warnings: list[str] = []
+        names = sources or [self._config.general.default_source]
+        searchers = [(name, cast(Searcher, self._registry.get("searcher", name))) for name in names]
+        if len(searchers) == 1:
+            _, searcher = searchers[0]
+            page = searcher.search(query, limit=limit, cursor=cursor)
+            warnings: list[str] = []
+        else:
+            page, warnings = self._multi_search(query, searchers, limit, cursor)
         if enrich:
             items = []
             for item in page.items:
@@ -80,6 +85,96 @@ class SearchService:
                 items.append(enriched)
                 warnings.extend(item_warnings)
             page = page.model_copy(update={"items": items})
+        return page, warnings
+
+    @staticmethod
+    def _dedup_key(paper: Paper) -> tuple[str, str] | None:
+        """DOI primary key; PMID fallback; normalized-title fingerprint last."""
+        if paper.identifiers.get("doi"):
+            return ("doi", paper.identifiers["doi"])
+        if paper.identifiers.get("pmid"):
+            return ("pmid", paper.identifiers["pmid"])
+        title = " ".join(paper.title.lower().split())
+        return ("title", title) if title else None
+
+    def _multi_search(
+        self,
+        query: Query,
+        searchers: list[tuple[str, Searcher]],
+        limit: int,
+        cursor: str | None,
+    ) -> tuple[SearchPage, list[str]]:
+        """Concurrent multi-source search: dedup merge, round-robin interleave.
+
+        The aggregated cursor is a JSON object {source: next_cursor}; sources
+        absent from it are exhausted. Dedup is per page (stateless across pages).
+        ``total`` is the pre-dedup sum of per-source totals (approximate).
+        """
+        cursors: dict[str, str] = {}
+        if cursor is not None:
+            try:
+                decoded = json.loads(cursor)
+            except ValueError as exc:
+                raise UsageError(
+                    "Multi-source cursor must be the JSON next_cursor from a previous "
+                    "multi-source page."
+                ) from exc
+            if not isinstance(decoded, dict):
+                raise UsageError("Multi-source cursor must be a JSON object.")
+            cursors = {str(k): str(v) for k, v in decoded.items()}
+        active = [(name, s) for name, s in searchers if cursor is None or name in cursors]
+        names = ",".join(name for name, _ in searchers)
+        if not active:
+            return SearchPage(items=[], total=0, next_cursor=None, source=names), []
+        warnings: list[str] = []
+        pages: dict[str, SearchPage] = {}
+        stalled: dict[str, str] = {}
+        with ThreadPoolExecutor(max_workers=len(active)) as pool:
+            futures = {
+                name: pool.submit(s.search, query, limit=limit, cursor=cursors.get(name))
+                for name, s in active
+            }
+            for name, future in futures.items():
+                try:
+                    pages[name] = future.result()
+                except PaperSearchError as exc:
+                    warnings.append(f"{name}: {exc.message}")
+                    if name in cursors:
+                        stalled[name] = cursors[name]  # keep progress for a later retry
+        if not pages:
+            raise UpstreamError("All search sources failed")
+
+        merged: list[Paper] = []
+        index_by_key: dict[tuple[str, str], int] = {}
+        lists = [(name, pages[name].items) for name, _ in active if name in pages]
+        for round_index in range(max((len(items) for _, items in lists), default=0)):
+            for name, items in lists:
+                if round_index >= len(items):
+                    continue
+                item = items[round_index]
+                key = self._dedup_key(item)
+                if key is not None and key in index_by_key:
+                    position = index_by_key[key]
+                    combined, merge_warnings = merge_papers(merged[position], item, source=name)
+                    merged[position] = combined
+                    warnings.extend(merge_warnings)
+                else:
+                    contributed = item.model_copy(deep=True)
+                    if name not in contributed.sources:
+                        contributed.sources.append(name)
+                    if key is not None:
+                        index_by_key[key] = len(merged)
+                    merged.append(contributed)
+
+        next_cursors = {name: page.next_cursor for name, page in pages.items() if page.next_cursor}
+        next_cursors.update(stalled)
+        total = sum(page.total or 0 for page in pages.values())
+        page = SearchPage(
+            items=merged[:limit],
+            total=total,
+            next_cursor=json.dumps(next_cursors, sort_keys=True) if next_cursors else None,
+            source=names,
+        )
         return page, warnings
 
 

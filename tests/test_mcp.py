@@ -100,6 +100,15 @@ def test_search_papers_invalid_query_returns_error_envelope(server: Any) -> None
     assert payload["error"]["code"] == "USAGE"
 
 
+def test_search_papers_multi_source(server: Any) -> None:
+    payload = _call(server, "search_papers", {"query": "CRISPR", "source": "fake,fake"})
+    assert len(payload["data"]["items"]) == 2  # same source twice -> deduped
+    assert payload["data"]["source"] == "fake,fake"
+    all_payload = _call(server, "search_papers", {"query": "CRISPR", "source": "all"})
+    assert len(all_payload["data"]["items"]) == 2
+    assert all_payload["data"]["source"] == "fake"
+
+
 def test_get_paper_enriches(server: Any) -> None:
     payload = _call(server, "get_paper", {"identifier": "doi:10.1000/fake1"})
     data = payload["data"]

@@ -285,6 +285,36 @@ def test_fetch_locators_config_default(cli: CliRunner, services: Services, tmp_p
     assert result.exit_code == 0
 
 
+def test_search_multi_source(cli: CliRunner, services: Services) -> None:
+    from paper_search.core.models import Paper, SearchPage
+    from paper_search.core.plugins import PluginMeta
+    from paper_search.core.query import Query
+
+    class SecondSearcher:
+        meta = PluginMeta(name="fake_b", version="0.1.0")
+
+        def search(self, q: Query, *, limit: int = 20, cursor: str | None = None) -> SearchPage:
+            return SearchPage(
+                items=[Paper(title="Other", identifiers={"doi": "10.1000/other"})],
+                total=1,
+                source="fake_b",
+            )
+
+    services.registry.register("searcher", SecondSearcher())
+    for args in (
+        ["--source", "fake,fake_b"],
+        ["--source", "fake", "--source", "fake_b"],
+        ["--source", "all"],
+    ):
+        result = cli.invoke(app, ["search", "CRISPR", *args, "--json"])
+        assert result.exit_code == 0, result.stdout
+        data = json.loads(result.stdout)["data"]
+        assert len(data["items"]) == 3
+        assert data["source"] in {"fake,fake_b", "fake_b,fake"}
+    bad = cli.invoke(app, ["search", "CRISPR", "--source", "nope", "--json"])
+    assert bad.exit_code == 2
+
+
 def test_fetch_locator_all_overrides_config(
     cli: CliRunner, services: Services, tmp_path: Path
 ) -> None:
