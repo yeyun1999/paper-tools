@@ -7,12 +7,33 @@ import pytest
 from paper_search.core.errors import UsageError
 from paper_search.core.models import (
     Author,
+    FullTextCandidate,
     Paper,
     merge_papers,
     normalize_doi,
     paper_slug,
     parse_identifier,
 )
+
+
+def test_merge_unions_fulltext_links() -> None:
+    base = Paper(
+        title="T",
+        fulltext_links=[FullTextCandidate(url="https://a.org/p.pdf", format="pdf", locator="x")],
+    )
+    incoming = Paper(
+        fulltext_links=[
+            FullTextCandidate(url="https://a.org/p.pdf", format="pdf", locator="y"),  # dup
+            FullTextCandidate(url="https://a.org/p.xml", format="xml", locator="y"),
+        ]
+    )
+    merged, warnings = merge_papers(base, incoming, source="y")
+    assert {(link.url, link.format) for link in merged.fulltext_links} == {
+        ("https://a.org/p.pdf", "pdf"),
+        ("https://a.org/p.xml", "xml"),
+    }
+    assert "y" in merged.sources
+    assert not warnings
 
 
 @pytest.mark.parametrize(

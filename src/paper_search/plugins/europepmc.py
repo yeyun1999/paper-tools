@@ -40,6 +40,25 @@ def translate_query(q: Query) -> str:
     return " AND ".join(parts)
 
 
+def _fulltext_links(record: dict[str, Any]) -> list[FullTextCandidate]:
+    """OA full-text URLs present in core search/enrich responses."""
+    links: list[FullTextCandidate] = []
+    entries = (record.get("fullTextUrlList") or {}).get("fullTextUrl") or []
+    for entry in entries:
+        url = entry.get("url")
+        style = entry.get("documentStyle")
+        if not url or entry.get("availabilityCode") != "OA":
+            continue
+        if style in ("pdf", "xml"):
+            links.append(FullTextCandidate(url=url, format=style, locator="europepmc"))
+    pmcid = record.get("pmcid")
+    if pmcid and record.get("inEPMC") == "Y":
+        links.append(
+            FullTextCandidate(url=fulltext_xml_url(pmcid), format="xml", locator="europepmc")
+        )
+    return links
+
+
 def _record_to_paper(record: dict[str, Any]) -> Paper:
     identifiers: dict[str, str] = {}
     if record.get("doi"):
@@ -69,6 +88,7 @@ def _record_to_paper(record: dict[str, Any]) -> Paper:
         publication_type=(record.get("pubTypeList", {}).get("pubType") or [None])[0],
         oa_status=oa_status,
         license=record.get("license"),
+        fulltext_links=_fulltext_links(record),
     )
 
 

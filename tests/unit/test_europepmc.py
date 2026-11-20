@@ -12,6 +12,7 @@ from paper_search.plugins.europepmc import (
     SEARCH_URL,
     EuropePmcMetadata,
     EuropePmcSearcher,
+    fulltext_xml_url,
     translate_query,
 )
 
@@ -78,3 +79,35 @@ def test_enrich_not_found(plugin_ctx: PluginContext) -> None:
     )
     stub = Paper(identifiers={"doi": "10.9999/nope"})
     assert EuropePmcMetadata(plugin_ctx).enrich(stub) is stub
+
+
+@respx.mock
+def test_fulltext_links_from_core_record(plugin_ctx: PluginContext) -> None:
+    record = {
+        **RECORD,
+        "inEPMC": "Y",
+        "fullTextUrlList": {
+            "fullTextUrl": [
+                {
+                    "url": "https://europepmc.org/articles/PMC1000000?pdf=render",
+                    "documentStyle": "pdf",
+                    "availabilityCode": "OA",
+                },
+                {
+                    "url": "https://pub.org/closed.pdf",
+                    "documentStyle": "pdf",
+                    "availabilityCode": "R",  # subscription: must be skipped
+                },
+            ]
+        },
+    }
+    respx.get(SEARCH_URL).mock(
+        return_value=httpx.Response(200, json={"resultList": {"result": [record]}})
+    )
+    page = EuropePmcSearcher(plugin_ctx).search(Query(text="CRISPR"), limit=1)
+    links = page.items[0].fulltext_links
+    assert {(link.url, link.format) for link in links} == {
+        ("https://europepmc.org/articles/PMC1000000?pdf=render", "pdf"),
+        (fulltext_xml_url("PMC1000000"), "xml"),
+    }
+    assert all(link.locator == "europepmc" for link in links)

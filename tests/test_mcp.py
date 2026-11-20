@@ -17,7 +17,7 @@ from mcp.client.stdio import stdio_client
 from typer.testing import CliRunner
 
 from paper_search import mcp_server
-from paper_search.cli import context
+from paper_search.cli import context, render
 from paper_search.cli.app import app
 from paper_search.core.errors import UsageError
 from tests.conftest import make_services
@@ -89,7 +89,7 @@ def test_tool_input_schemas(server: Any) -> None:
 
 def test_search_papers_success(server: Any) -> None:
     payload = _call(server, "search_papers", {"query": "CRISPR", "limit": 2})
-    assert payload["schema_version"] == "1.0"
+    assert payload["schema_version"] == render.SCHEMA_VERSION
     assert payload["command"] == "search"
     assert len(payload["data"]["items"]) == 2
     assert payload["data"]["items"][0]["identifiers"]["doi"] == "10.1000/fake1"
@@ -237,5 +237,5 @@ def test_stdio_roundtrip() -> None:
 
     names, payload = asyncio.run(asyncio.wait_for(roundtrip(), timeout=90))
     assert names == {"search_papers", "get_paper", "fetch_fulltext", "list_sources"}
-    assert payload["schema_version"] == "1.0"
+    assert payload["schema_version"] == render.SCHEMA_VERSION
     assert "pubmed" in {entry["name"] for entry in payload["data"]["searcher"]}

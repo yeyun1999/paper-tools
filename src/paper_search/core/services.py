@@ -24,6 +24,7 @@ from paper_search.core.errors import (
     UsageError,
 )
 from paper_search.core.models import (
+    SCHEMA_VERSION,
     Artifact,
     ArtifactFormat,
     FullText,
@@ -213,7 +214,11 @@ class MetadataService:
                 identifiers=paper.identifiers,
             )
 
-        cache_key = "meta:" + json.dumps(paper.identifiers, sort_keys=True) + f":{only_source}"
+        cache_key = (
+            f"meta:v{SCHEMA_VERSION}:"
+            + json.dumps(paper.identifiers, sort_keys=True)
+            + f":{only_source}"
+        )
         cached = self._cache.get(cache_key)
         if cached is not None:
             merged, merge_warnings = merge_papers(paper, Paper.model_validate(cached), source="")
@@ -315,6 +320,13 @@ class FetchService:
         )
         seen: set[tuple[str, str]] = set()
         candidates: list[FullTextCandidate] = []
+        # Links captured at search/enrich time seed the pool; locators still run
+        # for fallback diversity (merge, not short-circuit).
+        for link in paper.fulltext_links:
+            key = (link.url, link.format)
+            if key not in seen:
+                seen.add(key)
+                candidates.append(link)
         for loc in plugins:
             try:
                 resolved = loc.resolve(paper)

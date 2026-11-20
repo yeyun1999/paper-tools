@@ -155,3 +155,17 @@ def test_no_api_key_no_auth_header(plugin_ctx: PluginContext) -> None:
     )
     OpenAlexSearcher(plugin_ctx).search(Query(text="CRISPR"), limit=1)
     assert "authorization" not in route.calls.last.request.headers
+
+
+@respx.mock
+def test_search_captures_fulltext_links(plugin_ctx: PluginContext) -> None:
+    respx.get(WORKS_URL).mock(
+        return_value=httpx.Response(200, json={"meta": {}, "results": [WORK]})
+    )
+    page = OpenAlexSearcher(plugin_ctx).search(Query(text="CRISPR"), limit=1)
+    links = page.items[0].fulltext_links
+    assert {(link.url, link.format) for link in links} == {
+        ("https://pub.org/paper.pdf", "pdf"),
+        ("https://pub.org/paper", "landing"),
+    }
+    assert all(link.locator == "openalex" for link in links)

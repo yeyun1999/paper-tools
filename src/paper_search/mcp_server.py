@@ -1,7 +1,7 @@
 """MCP server (stdio) exposing the CLI services to AI assistants.
 
 Requires the ``mcp`` extra. Tools return the same JSON envelopes as
-``paper-search --json`` (schema_version 1.0), so agents can share one contract
+``paper-search --json`` (schema_version 1.1), so agents can share one contract
 across the shell and MCP channels.
 """
 

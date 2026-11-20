@@ -129,7 +129,7 @@ paper-search/
 
 ## 5. 核心域模型
 
-所有模型为 pydantic v2，字段即 JSON 契约（`schema_version = "1.0"`，M5 冻结）。示意：
+所有模型为 pydantic v2，字段即 JSON 契约（`schema_version = "1.1"`；1.0 于 M5 冻结，1.1 新增 Paper.fulltext_links）。示意：
 
 ```python
 class Author(BaseModel):
@@ -150,6 +150,7 @@ class Paper(BaseModel):
     publisher_url: str | None = None  # 无论 OA 与否都尽量给出
     license: str | None = None
     sources: list[str] = []  # 贡献过字段的插件名，用于溯源
+    fulltext_links: list[FullTextCandidate] = []  # 搜索/补全期捕获的 OA 全文链接（1.1）
 
 
 class SearchPage(BaseModel):
@@ -359,11 +360,11 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 1. **路由**：按 Paper 已有标识符与各 MetadataProvider 的 `id_kinds` 匹配，按优先级排序（pubmed/europepmc > crossref > openalex > semantic_scholar > unpaywall）。
 2. **逐个 enrich**：fill-missing 合并——空字段填入、identifiers 并集、`sources` 追加贡献插件；已有字段冲突时不覆盖，记入 `warnings`。`ConfigError`（如 Unpaywall 缺 email）不降级为告警，直接传播为退出码 5。
 3. **终止条件**：`get` 场景取到 title + 摘要即可提前停止（可配置）；`search --enrich` 场景对每条结果跑链，命中缓存则跳过网络。
-4. **缓存**：补全结果按标识符缓存 7d；`--no-cache` 绕过。
+4. **缓存**：补全结果按标识符缓存 7d，键含 `schema_version`（契约升级自动失效旧缓存）；`--no-cache` 绕过。
 
 ### 8.3 FetchService（定位 → 下载 → 提取）
 
-1. **收集**：调用所有 Locator 的 `resolve(paper)`，汇总候选（首版串行即可）；Locator 的 `ConfigError`/上游错误降级为 `warnings` 并跳过该定位器（单个定位器缺配置不阻断 fetch，如未配 Unpaywall email 仍可用其余定位器）。补全链的 `ConfigError` 则保持严格传播（退出码 5）。
+1. **收集**：先以 `paper.fulltext_links`（搜索/补全期捕获的链接）作为种子候选，再调用所有 Locator 的 `resolve(paper)` 补充（合并而非短路，保留降级多样性）；Locator 的 `ConfigError`/上游错误降级为 `warnings` 并跳过该定位器（单个定位器缺配置不阻断 fetch，如未配 Unpaywall email 仍可用其余定位器）。补全链的 `ConfigError` 则保持严格传播（退出码 5）。
 2. **去重排序**：按 URL+格式 去重（同一 tar.gz 可同时产出 XML 与 PDF 候选）；排序键 = 格式匹配度 > 来源可信度（europepmc/pmc_oa 直链 > unpaywall 出版商直链 > 其他）> license 明确度。
 3. **下载与校验**：候选路由给 `supports()` 且 `formats` 匹配的 Downloader；PDF 校验 `%PDF` 魔数与最小体积，XML 校验可解析且含 `<article>`；失败自动降级下一候选。
 4. **提取（仅 --format text）**：产物按格式选 Extractor（XML→jats 优先；PDF→pypdf，可用 `--extractor` 强制指定）；输出 `.txt` 并记录 `extractor`/`extracted_from`。
@@ -393,7 +394,7 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "command": "search",
   "data": { "items": [], "total": 0, "next_cursor": null, "source": "pubmed" },
   "warnings": []
@@ -404,7 +405,7 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "error": {
     "code": "FULLTEXT_UNAVAILABLE",
     "message": "No open-access full text found.",
@@ -454,7 +455,7 @@ paper-search fetch doi:10.1038/s41586-020-2649-2 --format text --json
 | `fetch_fulltext` | FetchService（定位→下载→提取） | FullText envelope（含落盘路径） |
 | `list_sources` | PluginRegistry.describe | 五角色插件清单 envelope |
 
-- 入参语义与 CLI 选项同源（pydantic `Field` 注解生成 inputSchema）；返回与 `--json` 完全一致的 success/error envelope（schema_version 1.0）。业务错误不抛异常，而是返回 `{"error": {code, message, details}}` envelope，agent 按 `error.code` 分支处理。
+- 入参语义与 CLI 选项同源（pydantic `Field` 注解生成 inputSchema）；返回与 `--json` 完全一致的 success/error envelope（schema_version 1.1）。业务错误不抛异常，而是返回 `{"error": {code, message, details}}` envelope，agent 按 `error.code` 分支处理。
 - stdio 纯度：协议外输出全部走 stderr（logging 已配置 stderr）；工具函数为同步实现，由 SDK 调度。
 - 契约测试：`tests/test_mcp.py`（fake 插件下四工具 envelope/错误路径 + 真实子进程 stdio 往返 + 入参 schema 冻结）；`tests/integration/test_live.py::test_mcp_stdio_full_flow_live`（真实 API 下 search→get→fetch 全流程）。
 - 挂载配置与调用范式见 [examples/agent-usage.md](../examples/agent-usage.md)。

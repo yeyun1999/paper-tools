@@ -13,6 +13,7 @@ from urllib.parse import quote
 from paper_search.core.errors import UsageError
 from paper_search.core.models import (
     Author,
+    FullTextCandidate,
     OAStatus,
     Paper,
     SearchPage,
@@ -52,6 +53,16 @@ def _paper_to_paper(record: dict[str, Any]) -> Paper:
         if raw_status in _OA_STATUSES
         else ("gold" if record.get("isOpenAccess") else "unknown")
     )
+    links: list[FullTextCandidate] = []
+    if oa_pdf.get("url"):
+        links.append(
+            FullTextCandidate(
+                url=oa_pdf["url"],
+                format="pdf",
+                locator="semantic_scholar",
+                license=oa_pdf.get("license"),
+            )
+        )
     return Paper(
         title=record.get("title") or "",
         identifiers=identifiers,
@@ -63,6 +74,7 @@ def _paper_to_paper(record: dict[str, Any]) -> Paper:
         oa_status=oa_status,
         license=oa_pdf.get("license"),
         publisher_url=(f"https://doi.org/{identifiers['doi']}" if "doi" in identifiers else None),
+        fulltext_links=links,
     )
 
 

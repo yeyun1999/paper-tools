@@ -1,6 +1,6 @@
 # AI 助理使用指南（agent-usage）
 
-paper-search 为 AI 助理提供两条通道，契约完全一致（`schema_version 1.0`）：
+paper-search 为 AI 助理提供两条通道，契约完全一致（`schema_version 1.1`）：
 
 1. **JSON CLI**：任意 shell 调用 `paper-search ... --json`，按退出码分支。
 2. **MCP 服务器**：`paper-search mcp`（stdio），四个工具，返回同样的 envelope。
@@ -46,7 +46,13 @@ uv run paper-search get doi:10.1038/s41586-020-2649-2 --fields title,doi,abstrac
 
 # 批量元数据：多个 ID 一次进程，NDJSON 逐行输出（单 ID 仍为单对象）
 uv run paper-search get pmid:38308006 doi:10.1038/s41586-020-2649-2 --fields title,doi,year --json
+```
 
+Paper 的 `fulltext_links` 字段（schema 1.1）在搜索/补全期就捕获源生的 OA 全文链接
+（url/format/locator/license），AI 助理可据此直接判断全文可得性，无需先 fetch；
+`fetch` 也会把这些链接并入候选池。
+
+```bash
 # OA 全文：pdf / xml / text（text 走 下载→提取 流水线，优先 XML）
 uv run paper-search fetch pmcid:PMC13434336 --format text --out papers/ --json
 uv run paper-search fetch doi:10.1093/nar/gkag769 --format pdf --json
@@ -65,7 +71,7 @@ uv run paper-search schema fetch          # FullText 的 JSON Schema
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "command": "fetch",
   "data": { "path": "papers/10.1093_nar_gkag769.txt", "format": "text",
             "sha256": "…", "source_url": "…", "downloader": "europepmc",

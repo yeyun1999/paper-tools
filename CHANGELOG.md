@@ -1,13 +1,19 @@
 # Changelog
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。
-JSON 契约（`schema_version`）自 M5 起冻结为 **1.0**：任何字段变更必须更新
+JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.1**）：任何字段变更必须更新
 `tests/snapshots/schema_v1.json` 快照、在本文件标注，并视为破坏性变更（提升 schema_version）。
 
 ## [未发布]
 
-### 变更
+### 变更（破坏性：schema_version 1.0 → 1.1）
 
+- **Paper 新增 `fulltext_links` 字段**（`list[FullTextCandidate]`）：OpenAlex /
+  Semantic Scholar / Europe PMC 在搜索与补全映射时即捕获源生 OA 全文链接
+  （PDF/XML/landing）；`merge_papers` 按 url+format 并集；FetchService 将其作为
+  种子候选并入定位池（合并而非短路，定位器照常运行保留降级多样性）。
+  schema 快照已重新生成；`SCHEMA_VERSION` 移至 core/models.py 统一管理。
+- **补全缓存键含 schema_version**：契约升级自动失效旧缓存（避免旧缓存缺失新字段）。
 - **`get` 支持批量**：`get ID...` 逐篇补全，`--json` 多 ID 输出 NDJSON（单 ID 仍单对象），
   `--fields` 逐条裁剪；MCP `get_paper` 保持单篇（客户端可并行调用）。
   **契约调整**：`get` 的逐 ID 错误（含单 ID）从 stderr 移至 stdout 结果流，与 `fetch` 对齐；

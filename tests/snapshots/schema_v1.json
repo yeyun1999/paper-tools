@@ -5,7 +5,7 @@
       "details": {},
       "message": "example"
     },
-    "schema_version": "1.0"
+    "schema_version": "1.1"
   },
   "models": {
     "Artifact": {
@@ -131,6 +131,47 @@
           "title": "Author",
           "type": "object"
         },
+        "FullTextCandidate": {
+          "properties": {
+            "format": {
+              "enum": [
+                "pdf",
+                "xml",
+                "text",
+                "landing"
+              ],
+              "title": "Format",
+              "type": "string"
+            },
+            "license": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "License"
+            },
+            "locator": {
+              "title": "Locator",
+              "type": "string"
+            },
+            "url": {
+              "title": "Url",
+              "type": "string"
+            }
+          },
+          "required": [
+            "url",
+            "format",
+            "locator"
+          ],
+          "title": "FullTextCandidate",
+          "type": "object"
+        },
         "Paper": {
           "properties": {
             "abstract": {
@@ -150,6 +191,13 @@
                 "$ref": "#/$defs/Author"
               },
               "title": "Authors",
+              "type": "array"
+            },
+            "fulltext_links": {
+              "items": {
+                "$ref": "#/$defs/FullTextCandidate"
+              },
+              "title": "Fulltext Links",
               "type": "array"
             },
             "identifiers": {
@@ -437,6 +485,47 @@
           ],
           "title": "Author",
           "type": "object"
+        },
+        "FullTextCandidate": {
+          "properties": {
+            "format": {
+              "enum": [
+                "pdf",
+                "xml",
+                "text",
+                "landing"
+              ],
+              "title": "Format",
+              "type": "string"
+            },
+            "license": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "License"
+            },
+            "locator": {
+              "title": "Locator",
+              "type": "string"
+            },
+            "url": {
+              "title": "Url",
+              "type": "string"
+            }
+          },
+          "required": [
+            "url",
+            "format",
+            "locator"
+          ],
+          "title": "FullTextCandidate",
+          "type": "object"
         }
       },
       "properties": {
@@ -457,6 +546,13 @@
             "$ref": "#/$defs/Author"
           },
           "title": "Authors",
+          "type": "array"
+        },
+        "fulltext_links": {
+          "items": {
+            "$ref": "#/$defs/FullTextCandidate"
+          },
+          "title": "Fulltext Links",
           "type": "array"
         },
         "identifiers": {
@@ -696,6 +792,47 @@
           "title": "Author",
           "type": "object"
         },
+        "FullTextCandidate": {
+          "properties": {
+            "format": {
+              "enum": [
+                "pdf",
+                "xml",
+                "text",
+                "landing"
+              ],
+              "title": "Format",
+              "type": "string"
+            },
+            "license": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "License"
+            },
+            "locator": {
+              "title": "Locator",
+              "type": "string"
+            },
+            "url": {
+              "title": "Url",
+              "type": "string"
+            }
+          },
+          "required": [
+            "url",
+            "format",
+            "locator"
+          ],
+          "title": "FullTextCandidate",
+          "type": "object"
+        },
         "Paper": {
           "properties": {
             "abstract": {
@@ -715,6 +852,13 @@
                 "$ref": "#/$defs/Author"
               },
               "title": "Authors",
+              "type": "array"
+            },
+            "fulltext_links": {
+              "items": {
+                "$ref": "#/$defs/FullTextCandidate"
+              },
+              "title": "Fulltext Links",
               "type": "array"
             },
             "identifiers": {
@@ -858,11 +1002,11 @@
       "type": "object"
     }
   },
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "success_envelope": {
     "command": "cmd",
     "data": {},
-    "schema_version": "1.0",
+    "schema_version": "1.1",
     "warnings": []
   }
 }

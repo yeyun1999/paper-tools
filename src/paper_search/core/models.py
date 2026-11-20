@@ -1,4 +1,4 @@
-"""Core domain models. Fields are the JSON contract (schema_version 1.0)."""
+"""Core domain models. Fields are the JSON contract (schema_version 1.1)."""
 
 from __future__ import annotations
 
@@ -14,6 +14,10 @@ IdentifierKind = Literal["doi", "pmid", "pmcid", "openalex", "s2", "arxiv", "url
 OAStatus = Literal["gold", "green", "hybrid", "bronze", "closed", "unknown"]
 ArtifactFormat = Literal["pdf", "xml", "text"]
 CandidateFormat = Literal["pdf", "xml", "text", "landing"]
+
+# JSON contract version. Bump on any field change (snapshot gate + CHANGELOG).
+# Also keys the metadata cache so contract bumps invalidate stale entries.
+SCHEMA_VERSION = "1.1"
 
 _DOI_URL_PREFIXES = (
     "https://doi.org/",
@@ -83,6 +87,13 @@ class Author(BaseModel):
     affiliation: str | None = None
 
 
+class FullTextCandidate(BaseModel):
+    url: str
+    format: CandidateFormat
+    locator: str
+    license: str | None = None
+
+
 class Paper(BaseModel):
     title: str = ""
     identifiers: dict[str, str] = Field(default_factory=dict)
@@ -95,6 +106,7 @@ class Paper(BaseModel):
     publisher_url: str | None = None
     license: str | None = None
     sources: list[str] = Field(default_factory=list)
+    fulltext_links: list[FullTextCandidate] = Field(default_factory=list)
 
 
 class SearchPage(BaseModel):
@@ -102,13 +114,6 @@ class SearchPage(BaseModel):
     total: int | None = None
     next_cursor: str | None = None
     source: str
-
-
-class FullTextCandidate(BaseModel):
-    url: str
-    format: CandidateFormat
-    locator: str
-    license: str | None = None
 
 
 class Artifact(BaseModel):
@@ -199,6 +204,12 @@ def merge_papers(base: Paper, incoming: Paper, *, source: str) -> tuple[Paper, l
     for src in incoming.sources:
         if src not in merged.sources:
             merged.sources.append(src)
+    seen_links = {(link.url, link.format) for link in merged.fulltext_links}
+    for link in incoming.fulltext_links:
+        if (link.url, link.format) not in seen_links:
+            merged.fulltext_links.append(link.model_copy(deep=True))
+            seen_links.add((link.url, link.format))
+            contributed = True
     if contributed and source and source not in merged.sources:
         merged.sources.append(source)
     return merged, warnings

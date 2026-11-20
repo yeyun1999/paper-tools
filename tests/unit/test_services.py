@@ -345,3 +345,34 @@ def test_single_source_cursor_stays_opaque(services: Services) -> None:
     page, _ = services.search.search(Query(text="q"), sources=["fake"], cursor="c9")
     assert page.next_cursor == "c9"  # FakeSearcher echoes the cursor; no JSON wrapping
     assert page.source == "fake"
+
+
+def test_fetch_uses_paper_fulltext_links(services: Services, tmp_path: Path) -> None:
+    class LinkMetadata:
+        meta = PluginMeta(name="linkmeta", version="0.1.0")
+        id_kinds = frozenset({"doi"})
+
+        def enrich(self, paper: Paper) -> Paper:
+            return Paper(
+                title="Seeded",
+                abstract="A",
+                identifiers=paper.identifiers,
+                fulltext_links=[
+                    FullTextCandidate(
+                        url="https://example.org/seed.pdf", format="pdf", locator="linkmeta"
+                    )
+                ],
+            )
+
+    class EmptyLocator:
+        meta = PluginMeta(name="emptyloc", version="0.1.0")
+
+        def resolve(self, paper: Paper) -> list[FullTextCandidate]:
+            return []
+
+    services.registry.register("metadata", LinkMetadata())
+    services.registry.register("locator", EmptyLocator())
+    # "missing" makes the fake providers pass through, so linkmeta supplies the links
+    result, _ = services.fetch.fetch("doi:10.1000/missing", out_dir=tmp_path, locators=["emptyloc"])
+    assert result.source_url == "https://example.org/seed.pdf"
+    assert result.path.read_bytes().startswith(b"%PDF")

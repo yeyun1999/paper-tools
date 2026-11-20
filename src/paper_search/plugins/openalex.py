@@ -66,6 +66,22 @@ def _work_to_paper(work: dict[str, Any]) -> Paper:
         for a in work.get("authorships") or []
         if (a.get("author") or {}).get("display_name")
     ]
+    links: list[FullTextCandidate] = []
+    if best.get("pdf_url"):
+        links.append(
+            FullTextCandidate(
+                url=best["pdf_url"], format="pdf", locator="openalex", license=best.get("license")
+            )
+        )
+    if best.get("landing_page_url"):
+        links.append(
+            FullTextCandidate(
+                url=best["landing_page_url"],
+                format="landing",
+                locator="openalex",
+                license=best.get("license"),
+            )
+        )
     return Paper(
         title=work.get("display_name") or "",
         identifiers=identifiers,
@@ -77,6 +93,7 @@ def _work_to_paper(work: dict[str, Any]) -> Paper:
         oa_status=oa_status,
         license=best.get("license") or primary.get("license"),
         publisher_url=primary.get("landing_page_url"),
+        fulltext_links=links,
     )
 
 

@@ -2,7 +2,7 @@
 
 > 配套架构设计见 [architecture.md](architecture.md)（v2，五类插件角色）。估算以人周计，总计约 6–7.5 人周；M2/M3 与 M4 部分任务可并行压缩。
 >
-> 状态：执行中。**M0–M5 已完成**（163 个离线测试全绿 + 13 个 live 冒烟：S2 无 key 共享限额时按设计跳过；ruff/mypy strict 全绿；MCP stdio 全流程已验证；schema 1.0 快照门禁进 CI）。**M6 进行中**：插件指南 / 模板 / bioRxiv 生态验证 / README 已完成，三包 uv build 通过；PyPI 发布待用户确定包名（paper-search / paper-search-cli 已被占用）与 token。
+> 状态：执行中。**M0–M5 已完成**，**M6 非发布部分完成**；feat/multi-source-search 分支增量：多源聚合搜索（去重+聚合游标）、get 批量 NDJSON、fulltext_links（**schema 1.1**，快照门禁同步）。203 个离线测试全绿 + live 冒烟（S2 无 key 共享限额时按设计跳过）；ruff/mypy strict 全绿。PyPI 发布待用户确定包名（paper-search / paper-search-cli 已被占用）与 token。
 
 ## 里程碑总览
 

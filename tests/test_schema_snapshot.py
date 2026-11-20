@@ -39,7 +39,7 @@ def write_snapshot() -> None:
 
 
 def test_schema_version_frozen() -> None:
-    assert render.SCHEMA_VERSION == "1.0"
+    assert render.SCHEMA_VERSION == "1.1"
 
 
 def test_contract_snapshot_matches() -> None:

@@ -142,6 +142,9 @@ class MyExtractor:
   `normalize_pmcid()`（补 PMC 前缀）。跨源同一 DOI 的 identifiers 必须归一一致。
 - `Paper.oa_status ∈ {gold, green, hybrid, bronze, closed, unknown}`；
   预印本记 `green`，`publication_type="preprint"`。
+- 搜索/补全响应里若带 OA 全文直链（PDF/XML），映射时填入 `Paper.fulltext_links`
+  （`FullTextCandidate(url, format, locator=meta.name, license)`）；FetchService 会将其
+  并入候选池，省掉定位阶段的重复请求。参考 openalex/semantic_scholar/europepmc 映射。
 - 密钥只从 `ctx.config.plugin_config("<name>")` 或环境变量读取；
   **禁止出现在日志、测试夹具与 JSON 输出**。
 
@@ -204,7 +207,8 @@ paper-search sources          # 自动注册
 
 - 包名建议 `paper-search-<source>`；entry-point 名与 `PluginMeta.name` 一致且全局唯一
   （与内置插件同名会覆盖并告警——这是有意的替换机制，请在 README 声明）。
-- 语义化版本；接口演进见主仓库 CHANGELOG（schema 1.0 已冻结，JSON 字段变更视为破坏性）。
+- 语义化版本；接口演进见主仓库 CHANGELOG（schema 1.1 已冻结，JSON 字段变更视为破坏性：
+  提升 `SCHEMA_VERSION`、重新生成快照、CHANGELOG 标注）。
 - 主包 PyPI 名称待定（`paper-search`/`paper-search-cli` 已被占用）；发布前模板与
   bioRxiv 包用 `[tool.uv.sources]` 指向本地主包，发布后改为普通版本约束。
 

@@ -13,9 +13,7 @@ from rich.table import Table
 
 from paper_search.cli.context import GlobalOpts
 from paper_search.core.errors import PaperSearchError
-from paper_search.core.models import FullText, Paper, SearchPage
-
-SCHEMA_VERSION = "1.0"
+from paper_search.core.models import SCHEMA_VERSION, FullText, Paper, SearchPage
 
 console = Console()
 err_console = Console(stderr=True)

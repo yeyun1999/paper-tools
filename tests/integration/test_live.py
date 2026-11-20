@@ -189,6 +189,16 @@ def test_multi_source_search_live(live_services: Services) -> None:
     assert any(len(p.sources) >= 2 for p in page.items)  # merged across sources
 
 
+def test_fulltext_links_live(ctx: PluginContext) -> None:
+    registry = PluginRegistry.discover(ctx)
+    try:
+        paper = registry.get("metadata", "openalex").enrich(Paper(identifiers={"doi": _NUMPY_DOI}))
+    except UpstreamError as exc:
+        pytest.skip(f"OpenAlex unavailable (status={exc.details.get('status', 'network')})")
+    assert any(link.format == "pdf" for link in paper.fulltext_links)
+    assert all(link.locator == "openalex" for link in paper.fulltext_links)
+
+
 def test_get_batch_live() -> None:
     import json
 

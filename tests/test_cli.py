@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from paper_search.cli import context
+from paper_search.cli import context, render
 from paper_search.cli.app import _force_utf8_streams, app
 from paper_search.core.config import load_config
 from paper_search.core.services import Services
@@ -26,7 +26,7 @@ def test_search_json(cli: CliRunner) -> None:
     result = cli.invoke(app, ["search", "CRISPR", "--json"])
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
-    assert payload["schema_version"] == "1.0"
+    assert payload["schema_version"] == render.SCHEMA_VERSION
     assert payload["command"] == "search"
     assert payload["data"]["source"] == "fake"
     assert len(payload["data"]["items"]) == 2
