@@ -88,10 +88,12 @@ def test_no_cache_bypasses(tmp_path: Path) -> None:
 @respx.mock
 def test_rate_limit_sleeps_between_requests(tmp_path: Path) -> None:
     respx.get("https://api.example.org/x").mock(return_value=httpx.Response(200, json={}))
-    client, sleeps = make_client(tmp_path, rate_limits={"api.example.org": 100.0})
+    # 10 req/s -> 100ms window: wide enough that scheduler jitter between the
+    # two in-process calls cannot skip the throttle sleep (flaky at 100 req/s).
+    client, sleeps = make_client(tmp_path, rate_limits={"api.example.org": 10.0})
     client.get_json("https://api.example.org/x")
     client.get_json("https://api.example.org/x")
-    assert any(0 < s <= 0.01 for s in sleeps)
+    assert any(0 < s <= 0.1 for s in sleeps)
 
 
 @respx.mock
