@@ -1,0 +1,172 @@
+name: Release
+
+# 发布主包 paper-tools-cli：先打好 v<semver> tag 并创建 GitHub Release，本工作流由
+# release.published 触发（也可用 workflow_dispatch 手动指定 tag）。
+# 插件包（paper-tools-biorxiv / paper-tools-plugin-template）是独立分发，不在本工作流范围内。
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 要发布的 tag（留空 = 当前 checkout 的 ref）
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    name: 门禁
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.event.inputs.tag || github.ref }}
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --locked --all-extras
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run pytest
+
+  build:
+    name: 构建与校验产物
+    needs: quality
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - name: 解析发布版本
+        id: tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          ref="${RELEASE_TAG:-${INPUT_TAG:-$REF_NAME}}"
+          case "$ref" in
+            v[0-9]*) ;;
+            *) echo "::error::发布必须由 v<semver> tag 触发（当前：$ref）"; exit 1 ;;
+          esac
+          echo "version=${ref#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.event.inputs.tag || github.ref }}
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: tag 版本与 pyproject 一致
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          declared="$(uv run --no-project python -c \
+            'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          if [ "$VERSION" != "$declared" ]; then
+            echo "::error::tag v$VERSION 与被检出的 pyproject.toml 版本 $declared 不一致"
+            exit 1
+          fi
+
+      - name: 构建 sdist + wheel
+        run: uv build
+
+      - name: 校验分发元数据
+        run: |
+          set -euo pipefail
+          uv run --with twine twine check dist/*
+          uv run --no-project python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          wheel = next(Path("dist").glob("*.whl"))
+          with ZipFile(wheel) as zf:
+              metadata = next(
+                  zf.read(name).decode() for name in zf.namelist() if name.endswith("METADATA")
+              )
+          fields = dict(
+              line.split(": ", 1) for line in metadata.splitlines() if ": " in line
+          )
+          for key in ("Name", "Version", "License-Expression", "Requires-Python"):
+              if key not in fields:
+                  raise SystemExit(f"缺元数据字段：{key}")
+          if fields["Name"] != "paper-tools-cli":
+              raise SystemExit(f"分发名不符：{fields['Name']}")
+          if not Path("dist").glob("*.tar.gz"):
+              raise SystemExit("缺 sdist")
+          print(f"待发布：{fields['Name']} {fields['Version']}")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: 发布到 PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/paper-tools-cli/${{ needs.build.outputs.version }}
+    permissions:
+      # PyPI trusted publishing（OIDC）：无需在仓库保存 token
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-directory: dist
+          print-response: false
+          # 改用 API token 发布时（需在 PyPI 配置该 token）：
+          #   user: __token__
+          #   password: ${{ secrets.PYPI_API_TOKEN }}
+
+  verify:
+    name: 公网安装冒烟
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: astral-sh/setup-uv@v5
+
+      - name: 等待索引可见
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          url="https://pypi.org/pypi/paper-tools-cli/$VERSION/json"
+          for _ in $(seq 1 30); do
+            live="$(curl -fsS "$url" 2>/dev/null \
+              | uv run --no-project python -c 'import json,sys; print(json.load(sys.stdin)["info"]["version"])' \
+              2>/dev/null || true)"
+            if [ "$live" = "$VERSION" ]; then
+              echo "PyPI 已可见 $VERSION"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::$url 超时仍不可见"
+          exit 1
+
+      - name: 从 PyPI 安装并运行
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          uv tool run --from "paper-tools-cli==$VERSION" paper-tools --version \
+            | grep -F "$VERSION"
+          uv tool run --from "paper-tools-cli==$VERSION" paper-tools sources --json \
+            | grep -F '"schema_version"'
