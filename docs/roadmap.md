@@ -107,13 +107,18 @@
 
 **目标**：外部用户可安装，外部开发者可写插件。
 
-- [ ] `uv build` + `uv publish` 发布 PyPI；发布后验证 `uvx paper-tools-cli --help` 与 `uv tool install --from paper-tools-cli paper-tools`（build/twine check 已通过；分发名 `paper-tools-cli`——`paper-search` 已占用、`paper-tools` 与 `papertools` 规范化同名被 PyPI 拒；上传被拒后未产生任何发布）
+- [x] `uv build` + `uv publish` 发布 PyPI：`paper-tools-cli` 0.1.0 上线（MIT）。分发名说明：
+      `paper-search` 已被占用、`paper-tools` 与空壳项目 `papertools` 规范化同名被 PyPI 拒。
+      发布后验证：`uv tool run --from paper-tools-cli paper-tools --help` 与
+      `... sources --json` / `search ... --json`（schema 1.1、`fulltext_links` 正常返回）；
+      `uv tool install paper-tools-cli` 后命令为 `paper-tools`。
 - [x] `docs/plugin-guide.md`：五类角色接口、查询翻译表、配置命名空间、契约测试接入、多角色注册、发布流程
 - [x] 插件模板仓库（最小可运行 Searcher + MetadataProvider 示例，含 Locator/Downloader/Extractor 可选骨架）
 - [x] 以 bioRxiv 插件作为第三方案例验证扩展机制（模板派生，独立包安装后自动出现在 `sources`；真实 API 验证通过）
 - [x] README 完善：安装、快速上手、合规声明、插件生态链接
 
-**验收**：干净环境 `uvx paper-tools-cli search ...` 可用（可执行文件仍名 `paper-tools`）；模板插件 `uv pip install -e` 后自动注册并通过契约测试；PyPI 页面与文档链接完整。
+**验收**：干净环境 `uvx --from paper-tools-cli paper-tools search ...` 可用（分发名带 `-cli`
+后缀，可执行文件仍名 `paper-tools`，故 `uvx` 需 `--from`）；模板插件 `uv pip install -e` 后自动注册并通过契约测试；PyPI 页面与文档链接完整。
 
 ---
 

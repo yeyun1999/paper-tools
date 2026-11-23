@@ -33,6 +33,18 @@ uv run paper-tools mcp        # 挂载配置见 examples/agent-usage.md
 
 闭源文献不会绕过付费墙：`fetch` 返回 `FULLTEXT_UNAVAILABLE`（退出码 4）并附出版商链接。
 
+## 安装
+
+PyPI 分发名为 `paper-tools-cli`，安装后的命令仍是 `paper-tools`：
+
+```bash
+uv tool install paper-tools-cli          # 或 pipx install paper-tools-cli
+paper-tools search "CRISPR" --limit 5 --json
+
+uvx --from paper-tools-cli paper-tools sources   # 免安装一次性运行
+pip install paper-tools-cli[text]        # 需要 PDF 文本提取时带上 extra
+```
+
 ## 安装与运行（开发）
 
 ```bash
