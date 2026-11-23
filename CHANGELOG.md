@@ -57,6 +57,8 @@ JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.1**）：任何�
 - **多源聚合搜索**：`search --source` 支持重复指定 / 逗号分隔 / `all`（MCP `search_papers`
   的 `source` 同语义）。多源并发检索，按 DOI→PMID→标题指纹去重，`merge_papers` 合并
   （identifiers 并集、sources 溯源、冲突告警），轮转交错排序；失败源降级 warning。
+  `--limit` 仅约束每个源的返回量，合并去重后不截断（发布前调整：此前多源页会在全局
+  截断到 limit，导致被截掉的候选随游标推进丢失）。
   多源 `next_cursor` 为 JSON 聚合游标 `{source: cursor}`（单源游标不变）；`total` 为
   去重前各源之和（近似）。服务层 `SearchService.search` 参数 `source: str` 改为
   `sources: list[str]`（发布前调整）。

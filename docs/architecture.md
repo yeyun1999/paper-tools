@@ -352,7 +352,7 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 1. **路由**：`sources` 为空取 `general.default_source`；单源时游标原样透传（行为与历史版本一致）。
 2. **多源并发**：多个源用线程池并发检索（各源独立 limit），失败源降级为 `warnings`，全部失败抛 `UpstreamError`（退出码 3）。
 3. **去重合并**：主键 DOI → 兜底 PMID → 再兜底规范化标题指纹；重复条目走 `merge_papers`（fill-missing、identifiers 并集、sources 记录贡献源、冲突告警）。去重仅在**页内**（跨页无状态）。
-4. **排序**：各源相关性分数不可比，按源顺序轮转交错（round-robin），截断到 limit；`total` 为各源 total 之和（去重前，近似值）。
+4. **排序**：各源相关性分数不可比，按源顺序轮转交错（round-robin）输出；`--limit` 只约束各源返回量，合并去重后不再截断（单页可超过 limit）；`total` 为各源 total 之和（去重前，近似值）。
 5. **聚合游标**：`next_cursor` 为 JSON 对象 `{source: cursor}`；续传时不在对象中的源视为耗尽。失败但持有旧游标的源保留进度以便重试。单源游标仍是不透明字符串。
 
 ### 8.2 MetadataService（补全链）

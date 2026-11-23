@@ -290,14 +290,17 @@ def test_multi_source_title_fingerprint_dedup(services: Services) -> None:
     assert page.items[0].year == 2020
 
 
-def test_multi_source_limit_truncates(services: Services) -> None:
+def test_multi_source_limit_is_per_source(services: Services) -> None:
     sa = StubSearcher(
         "sa", [Paper(title=f"P{i}", identifiers={"doi": f"10.1000/{i}"}) for i in range(5)]
     )
+    sb = StubSearcher(
+        "sb", [Paper(title=f"Q{i}", identifiers={"doi": f"10.2000/{i}"}) for i in range(5)]
+    )
     services.registry.register("searcher", sa)
-    services.registry.register("searcher", StubSearcher("sb", []))
+    services.registry.register("searcher", sb)
     page, _ = services.search.search(Query(text="q"), sources=["sa", "sb"], limit=2)
-    assert len(page.items) == 2
+    assert len(page.items) == 4  # 2 per source; the deduped merge is not truncated
 
 
 def test_multi_source_failure_degrades_to_warning(services: Services) -> None:

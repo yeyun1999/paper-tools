@@ -39,7 +39,16 @@ def register(app: typer.Typer) -> None:
             typer.Option("--source", help=_SOURCE_HELP),
         ] = None,
         limit: Annotated[
-            int, typer.Option("--limit", min=1, max=100, help="Max results (1-100).")
+            int,
+            typer.Option(
+                "--limit",
+                min=1,
+                max=100,
+                help=(
+                    "Per-source result cap (1-100). Single-source pages return at most "
+                    "this many; multi-source merges all deduped hits and may exceed it."
+                ),
+            ),
         ] = 20,
         cursor: Annotated[
             str | None,

@@ -90,7 +90,17 @@ def build_server(opts: GlobalOpts | None = None) -> MCPServer[Any]:
                 f"with dedup (default: {default_source}). Available: {_available('searcher')}."
             ),
         ),
-        limit: Annotated[int, Field(ge=1, le=100, description="Max results (1-100).")] = 20,
+        limit: Annotated[
+            int,
+            Field(
+                ge=1,
+                le=100,
+                description=(
+                    "Per-source result cap (1-100). Single-source pages return at most "
+                    "this many; multi-source merges all deduped hits and may exceed it."
+                ),
+            ),
+        ] = 20,
         cursor: Annotated[
             str | None, Field(description="Pagination cursor from next_cursor.")
         ] = None,

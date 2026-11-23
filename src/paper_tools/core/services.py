@@ -107,6 +107,9 @@ class SearchService:
     ) -> tuple[SearchPage, list[str]]:
         """Concurrent multi-source search: dedup merge, round-robin interleave.
 
+        ``limit`` caps each source's request only; the deduped merge is
+        returned in full (a page may exceed ``limit``).
+
         The aggregated cursor is a JSON object {source: next_cursor}; sources
         absent from it are exhausted. Dedup is per page (stateless across pages).
         ``total`` is the pre-dedup sum of per-source totals (approximate).
@@ -171,7 +174,7 @@ class SearchService:
         next_cursors.update(stalled)
         total = sum(page.total or 0 for page in pages.values())
         page = SearchPage(
-            items=merged[:limit],
+            items=merged,
             total=total,
             next_cursor=json.dumps(next_cursors, sort_keys=True) if next_cursors else None,
             source=names,

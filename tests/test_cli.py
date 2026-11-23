@@ -250,7 +250,7 @@ def test_help_lists_available_plugins_and_descriptions() -> None:
         "Publication year lower bound",
         "Publication year upper bound",
         "Restrict to open-access papers",
-        "Max results",
+        "Per-source result cap",
     ):
         assert description in search.stdout
     got = runner.invoke(app, ["get", "--help"])

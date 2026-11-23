@@ -34,6 +34,7 @@ uv run paper-tools search "CRISPR base editing" --source pubmed --limit 10 --jso
 uv run paper-tools search "CRISPR base editing" --source europepmc --oa-only --enrich --json
 
 # 多源聚合：并发检索 + DOI 主键去重合并（identifiers 并集、sources 记录贡献源）
+# --limit 是每源返回上限；合并去重后不截断，单页结果可超过 limit
 uv run paper-tools search "CRISPR base editing" --source pubmed,europepmc --limit 10 --json
 uv run paper-tools search "Array programming with NumPy" --source all --json
 
