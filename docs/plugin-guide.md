@@ -209,7 +209,9 @@ paper-tools sources          # 自动注册
   （与内置插件同名会覆盖并告警——这是有意的替换机制，请在 README 声明）。
 - 语义化版本；接口演进见主仓库 CHANGELOG（schema 1.1 已冻结，JSON 字段变更视为破坏性：
   提升 `SCHEMA_VERSION`、重新生成快照、CHANGELOG 标注）。
-- 主包 PyPI 名称定为 `paper-tools`（原名 `paper-search` 已被占用）；发布前模板与
+- 主包 PyPI 分发名为 `paper-tools-cli`（`paper-search` 已被占用；`paper-tools` 与已有
+  `papertools` 规范化同名被拒），但模块仍是 `paper_tools`、命令仍是 `paper-tools`，
+  插件包依赖写 `dependencies = ["paper-tools-cli"]`；发布前模板与
   bioRxiv 包用 `[tool.uv.sources]` 指向本地主包，发布后改为普通版本约束。
 
 ## 10. 合规硬约束

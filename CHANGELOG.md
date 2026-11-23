@@ -19,12 +19,16 @@ JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.1**）：任何�
   **契约调整**：`get` 的逐 ID 错误（含单 ID）从 stderr 移至 stdout 结果流，与 `fetch` 对齐；
   进程级错误（用法/配置）仍走 stderr。
 - **项目更名**：因 PyPI 上 `paper-search` 名称已被占用，包名、CLI 命令、Python 导入名
-  及配套标识符全部改为 `paper-tools` / `paper_tools`：分发名 `paper-search`→`paper-tools`，
-  模块 `paper_search`→`paper_tools`，命令 `paper-search`→`paper-tools`，环境变量前缀
+  及配套标识符全部改为 `paper-tools` / `paper_tools`：分发名 `paper-search`→`paper-tools-cli`
+  （`paper-tools` 亦被 PyPI 拒，见下条），模块 `paper_search`→`paper_tools`，
+  命令 `paper-search`→`paper-tools`，环境变量前缀
   `PAPER_SEARCH_`→`PAPER_TOOLS_`，异常基类 `PaperSearchError`→`PaperToolsError`，
   entry-point 组 `paper_search.*`→`paper_tools.*`，User-Agent 与配置/缓存目录名同步更新，
   插件包 `paper-search-biorxiv`→`paper-tools-biorxiv`、模板 `paper-search-plugin-template`→
   `paper-tools-plugin-template`。未发布阶段无兼容负担，旧名不做别名保留。
+- **分发名定为 `paper-tools-cli`**：`paper-tools` 被 PyPI 以「与已有项目过于相似」拒绝
+  （已有空壳项目 `papertools`，PEP 503 规范化后同名）。仅分发名改变，Python 模块仍为
+  `paper_tools`、命令仍为 `paper-tools`；插件包依赖声明同步改为 `paper-tools-cli`。
 - **定位阶段配置错误不再阻断 fetch**：Locator 的 `ConfigError`（如 Unpaywall 缺 email）
   降级为 warning 并跳过该定位器，其余定位器照常工作；补全链（`get`/`--enrich`）保持
   严格传播（退出码 5）。

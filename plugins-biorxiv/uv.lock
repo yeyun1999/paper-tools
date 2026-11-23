@@ -155,7 +155,32 @@ wheels = [
 ]
 
 [[package]]
-name = "paper-tools"
+name = "paper-tools-biorxiv"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "paper-tools-cli" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "respx" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "paper-tools-cli", editable = "../" }]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8" },
+    { name = "respx", specifier = ">=0.21" },
+    { name = "ruff", specifier = ">=0.8" },
+]
+
+[[package]]
+name = "paper-tools-cli"
 version = "0.1.0"
 source = { editable = "../" }
 dependencies = [
@@ -191,31 +216,6 @@ dev = [
     { name = "respx", specifier = ">=0.21" },
     { name = "ruff", specifier = ">=0.6" },
     { name = "types-defusedxml", specifier = ">=0.7.0.20260504" },
-]
-
-[[package]]
-name = "paper-tools-biorxiv"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "paper-tools" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "respx" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "paper-tools", editable = "../" }]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=8" },
-    { name = "respx", specifier = ">=0.21" },
-    { name = "ruff", specifier = ">=0.8" },
 ]
 
 [[package]]

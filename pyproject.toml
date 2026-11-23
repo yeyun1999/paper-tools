@@ -1,5 +1,5 @@
 [project]
-name = "paper-tools"
+name = "paper-tools-cli"
 version = "0.1.0"
 description = "Literature search and open-access full-text retrieval CLI for biomedical researchers and AI assistants"
 readme = "README.md"
