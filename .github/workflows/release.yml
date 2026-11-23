@@ -2,11 +2,16 @@ name: Release
 
 # Publishes the main distribution (paper-tools-cli) to PyPI via OIDC trusted
 # publishing, so no credential is stored in this repository.
-# Runs when a GitHub Release is published; the version is read from
-# pyproject.toml and the release tag must match it.
+# Triggers: pushing a v<semver> tag, or publishing a GitHub Release. The version always
+# comes from pyproject.toml, and the tag must equal v<that version>. A version already
+# present on PyPI is skipped instead of failing, so the release event that follows our
+# own tag push (or a forgotten version bump) is a no-op rather than a red run.
 # Plugin packages (paper-tools-biorxiv, paper-tools-plugin-template) are separate
 # distributions and out of scope here.
 on:
+  push:
+    tags:
+      - "v[0-9]*"
   release:
     types: [published]
   workflow_dispatch:
@@ -39,6 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      should-publish: ${{ steps.dup.outputs.should_publish }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -59,19 +65,20 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "release version: $version"
 
-      - name: Release tag must match the resolved version
-        if: github.event_name == 'release'
+      - name: Tag must match the resolved version
+        if: github.event_name != 'workflow_dispatch'
         env:
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ github.event.release.tag_name || github.ref_name }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
           if [ "$TAG" != "v$VERSION" ]; then
-            echo "::error::release tag $TAG does not match v$VERSION from pyproject.toml"
+            echo "::error::tag $TAG does not match v$VERSION from pyproject.toml"
             exit 1
           fi
 
-      - name: Reject an already published version
+      - name: Detect whether this version still needs publishing
+        id: dup
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -79,14 +86,18 @@ jobs:
           code="$(curl -s -o /dev/null -w '%{http_code}' \
             "https://pypi.org/pypi/paper-tools-cli/$VERSION/json")"
           if [ "$code" = "200" ]; then
-            echo "::error::paper-tools-cli $VERSION is already on PyPI; bump project.version first"
-            exit 1
+            echo "::notice::paper-tools-cli $VERSION is already on PyPI; skipping publish"
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build sdist and wheel
+        if: steps.dup.outputs.should_publish == 'true'
         run: uv build
 
       - name: Check distribution metadata
+        if: steps.dup.outputs.should_publish == 'true'
         run: |
           set -euo pipefail
           uv run --with twine twine check dist/*
@@ -123,6 +134,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
 
       - uses: actions/upload-artifact@v4
+        if: steps.dup.outputs.should_publish == 'true'
         with:
           name: dist
           path: dist/*
@@ -130,6 +142,7 @@ jobs:
 
   publish:
     name: Publish to PyPI
+    if: needs.build.outputs.should-publish == 'true'
     needs: build
     runs-on: ubuntu-latest
     environment:
@@ -150,6 +163,7 @@ jobs:
 
   verify:
     name: Smoke test the published package
+    if: needs.build.outputs.should-publish == 'true'
     needs: [build, publish]
     runs-on: ubuntu-latest
     timeout-minutes: 10
