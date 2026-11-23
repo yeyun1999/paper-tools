@@ -6,11 +6,11 @@ import httpx
 import pytest
 import respx
 
-from paper_search.core.errors import UsageError
-from paper_search.core.models import Paper
-from paper_search.core.plugins import PluginContext
-from paper_search.core.query import Query
-from paper_search.plugins.semantic_scholar import (
+from paper_tools.core.errors import UsageError
+from paper_tools.core.models import Paper
+from paper_tools.core.plugins import PluginContext
+from paper_tools.core.query import Query
+from paper_tools.plugins.semantic_scholar import (
     PAPER_URL,
     SEARCH_URL,
     SemanticScholarMetadata,

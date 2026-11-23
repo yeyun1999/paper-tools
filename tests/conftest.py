@@ -6,20 +6,20 @@ from pathlib import Path
 
 import pytest
 
-from paper_search.core.cache import Cache
-from paper_search.core.config import AppConfig, GeneralConfig
-from paper_search.core.errors import UpstreamError
-from paper_search.core.http import HttpClient
-from paper_search.core.models import (
+from paper_tools.core.cache import Cache
+from paper_tools.core.config import AppConfig, GeneralConfig
+from paper_tools.core.errors import UpstreamError
+from paper_tools.core.http import HttpClient
+from paper_tools.core.models import (
     Artifact,
     Author,
     FullTextCandidate,
     Paper,
     SearchPage,
 )
-from paper_search.core.plugins import PluginContext, PluginMeta, PluginRegistry
-from paper_search.core.query import Query
-from paper_search.core.services import Services
+from paper_tools.core.plugins import PluginContext, PluginMeta, PluginRegistry
+from paper_tools.core.query import Query
+from paper_tools.core.services import Services
 
 PDF_BYTES = b"%PDF-1.4\n" + b"x" * 2048
 XML_BYTES = b'<?xml version="1.0"?><article><body><p>Hello CRISPR world</p></body></article>'

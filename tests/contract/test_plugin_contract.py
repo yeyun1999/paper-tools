@@ -7,9 +7,9 @@ from __future__ import annotations
 
 import pytest
 
-from paper_search.core.models import FullTextCandidate, Paper
-from paper_search.core.query import Query
-from paper_search.core.services import Services
+from paper_tools.core.models import FullTextCandidate, Paper
+from paper_tools.core.query import Query
+from paper_tools.core.services import Services
 
 
 def test_searcher_contract(services: Services) -> None:

@@ -1,6 +1,6 @@
-# paper-search 插件开发指南
+# paper-tools 插件开发指南
 
-paper-search 的五类能力全部插件化：第三方包安装后**自动注册**，无需改主程序。
+paper-tools 的五类能力全部插件化：第三方包安装后**自动注册**，无需改主程序。
 本指南覆盖接口、约定、测试与发布。可运行起点：[plugin-template/](../plugin-template/)；
 真实第三方案例：[plugins-biorxiv/](../plugins-biorxiv/)。
 
@@ -14,11 +14,11 @@ Searcher   Metadata   Locator    Downloader   Extractor
 
 | 角色 | entry-point group | 职责 |
 |---|---|---|
-| Searcher | `paper_search.searchers` | 统一 Query → 上游检索 → SearchPage |
-| MetadataProvider | `paper_search.metadata` | 按标识符补全 Paper（fill-missing） |
-| Locator | `paper_search.locators` | 定位 OA 全文候选（url + format） |
-| Downloader | `paper_search.downloaders` | 候选 URL → 字节产物 Artifact |
-| Extractor | `paper_search.extractors` | 字节产物 → 纯文本 |
+| Searcher | `paper_tools.searchers` | 统一 Query → 上游检索 → SearchPage |
+| MetadataProvider | `paper_tools.metadata` | 按标识符补全 Paper（fill-missing） |
+| Locator | `paper_tools.locators` | 定位 OA 全文候选（url + format） |
+| Downloader | `paper_tools.downloaders` | 候选 URL → 字节产物 Artifact |
+| Extractor | `paper_tools.extractors` | 字节产物 → 纯文本 |
 
 一个类可实现多个角色并注册进多个 group（内置 `europepmc` 同时是
 Searcher / MetadataProvider / Locator / Downloader）。同名注册会覆盖并产生
@@ -27,14 +27,14 @@ Searcher / MetadataProvider / Locator / Downloader）。同名注册会覆盖并
 ## 2. 快速上手（模板派生）
 
 ```bash
-cp -r plugin-template paper-search-mysource
-cd paper-search-mysource
+cp -r plugin-template paper-tools-mysource
+cd paper-tools-mysource
 # 1. pyproject.toml：改 name、包目录、entry-point 名
 # 2. PluginMeta.name 与 entry-point 名保持一致
 # 3. 替换 API URL / 查询翻译表 / 响应映射
 uv sync && uv run pytest                 # 独立环境：respx 回放 + 契约测试
-uv pip install -e .                      # 安装进 paper-search 所在环境
-paper-search sources --json              # 自动出现你的源
+uv pip install -e .                      # 安装进 paper-tools 所在环境
+paper-tools sources --json              # 自动出现你的源
 ```
 
 > 主环境 `uv sync` 会移除未写入主项目依赖的插件包；插件日常安装用 `uv pip install -e`。
@@ -43,7 +43,7 @@ paper-search sources --json              # 自动出现你的源
 
 所有插件构造函数接收 `PluginContext(config, http, cache)`，并声明类属性
 `meta = PluginMeta(name, version, description)`。接口定义见
-[src/paper_search/core/plugins.py](../src/paper_search/core/plugins.py)。
+[src/paper_tools/core/plugins.py](../src/paper_tools/core/plugins.py)。
 
 ### Searcher
 
@@ -124,7 +124,7 @@ class MyExtractor:
 
 ## 4. 统一 Query 与查询翻译表
 
-`Query`（[core/query.py](../src/paper_search/core/query.py)）字段：
+`Query`（[core/query.py](../src/paper_tools/core/query.py)）字段：
 `text / title / author / journal / year_from / year_to / open_access / raw`。
 `raw` 与结构化字段互斥（模型层校验）；空查询非法。
 
@@ -153,8 +153,8 @@ class MyExtractor:
 插件配置一律放 `plugins.<name>.*`：
 
 ```bash
-paper-search config set plugins.mysource.api_key KEY
-paper-search config set plugins.mysource.server prod
+paper-tools config set plugins.mysource.api_key KEY
+paper-tools config set plugins.mysource.server prod
 ```
 
 代码内 `self.ctx.config.plugin_config("mysource").get("api_key")`。
@@ -164,7 +164,7 @@ paper-search config set plugins.mysource.server prod
 
 ## 7. HTTP 与缓存
 
-统一走 `ctx.http`（[core/http.py](../src/paper_search/core/http.py)）：
+统一走 `ctx.http`（[core/http.py](../src/paper_tools/core/http.py)）：
 
 - `get_json(url, params=…, headers=…, cache_ttl=…)`：GET 响应缓存。
   约定 TTL：检索 1h（3600）、元数据 7d（604800）。
@@ -201,15 +201,15 @@ paper-search config set plugins.mysource.server prod
 uv build                      # sdist + wheel
 uv publish                    # 需要 PyPI token（UV_PUBLISH_TOKEN）
 # 用户侧：
-uv pip install paper-search-mysource
-paper-search sources          # 自动注册
+uv pip install paper-tools-mysource
+paper-tools sources          # 自动注册
 ```
 
-- 包名建议 `paper-search-<source>`；entry-point 名与 `PluginMeta.name` 一致且全局唯一
+- 包名建议 `paper-tools-<source>`；entry-point 名与 `PluginMeta.name` 一致且全局唯一
   （与内置插件同名会覆盖并告警——这是有意的替换机制，请在 README 声明）。
 - 语义化版本；接口演进见主仓库 CHANGELOG（schema 1.1 已冻结，JSON 字段变更视为破坏性：
   提升 `SCHEMA_VERSION`、重新生成快照、CHANGELOG 标注）。
-- 主包 PyPI 名称待定（`paper-search`/`paper-search-cli` 已被占用）；发布前模板与
+- 主包 PyPI 名称定为 `paper-tools`（原名 `paper-search` 已被占用）；发布前模板与
   bioRxiv 包用 `[tool.uv.sources]` 指向本地主包，发布后改为普通版本约束。
 
 ## 10. 合规硬约束

@@ -5,10 +5,10 @@ from __future__ import annotations
 import httpx
 import respx
 
-from paper_search.core.models import Paper
-from paper_search.core.plugins import PluginContext
-from paper_search.core.query import Query
-from paper_search.plugins.europepmc import (
+from paper_tools.core.models import Paper
+from paper_tools.core.plugins import PluginContext
+from paper_tools.core.query import Query
+from paper_tools.plugins.europepmc import (
     SEARCH_URL,
     EuropePmcMetadata,
     EuropePmcSearcher,

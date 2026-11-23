@@ -1,13 +1,13 @@
 [project]
-name = "paper-search-biorxiv"
+name = "paper-tools-biorxiv"
 version = "0.1.0"
-description = "bioRxiv/medRxiv metadata plugin for paper-search (official details API)"
+description = "bioRxiv/medRxiv metadata plugin for paper-tools (official details API)"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["paper-search"]
+dependencies = ["paper-tools"]
 
-[project.entry-points."paper_search.metadata"]
-biorxiv = "paper_search_biorxiv.metadata:BiorxivMetadata"
+[project.entry-points."paper_tools.metadata"]
+biorxiv = "paper_tools_biorxiv.metadata:BiorxivMetadata"
 
 [dependency-groups]
 dev = ["pytest>=8", "respx>=0.21", "ruff>=0.8"]
@@ -17,12 +17,12 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/paper_search_biorxiv"]
+packages = ["src/paper_tools_biorxiv"]
 
-# 本地开发：依赖同仓库的 paper-search 主包（editable）。
+# 本地开发：依赖同仓库的 paper-tools 主包（editable）。
 # 主包发布 PyPI 后删除本段，改为普通版本约束。
 [tool.uv.sources]
-paper-search = { path = "../", editable = true }
+paper-tools = { path = "../", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

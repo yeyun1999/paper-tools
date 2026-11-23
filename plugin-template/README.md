@@ -1,11 +1,11 @@
-# paper-search 插件模板
+# paper-tools 插件模板
 
 最小可运行的 **Searcher + MetadataProvider** 示例，含 Locator / Downloader / Extractor 可选骨架。
 示例 API（`api.example.org`）是虚构的，测试用 respx 回放；派生时替换为你的真实来源。
 
 ## 派生步骤
 
-1. 复制本目录，改 `pyproject.toml` 的 `name`（建议 `paper-search-<source>`）与包目录名。
+1. 复制本目录，改 `pyproject.toml` 的 `name`（建议 `paper-tools-<source>`）与包目录名。
 2. 改 entry-point 名（`example` → 你的源名）与 `PluginMeta.name`（两者一致）。
 3. 替换 `searcher.py` / `metadata.py` / `mapping.py` 中的 API URL、查询翻译表与响应映射。
 4. 用真实响应更新 `tests/test_example.py` 的回放夹具；保留契约不变量测试。
@@ -20,7 +20,7 @@ uv run pytest                # respx 回放 + 契约测试
 
 # 安装进主环境后自动出现在 sources：
 uv pip install -e ./plugin-template
-uv run paper-search sources --json
+uv run paper-tools sources --json
 ```
 
 > 注意：主环境执行 `uv sync` 会移除未写入主项目依赖的插件包；

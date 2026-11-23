@@ -10,10 +10,10 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from paper_search.cli import context, render
-from paper_search.cli.app import _force_utf8_streams, app
-from paper_search.core.config import load_config
-from paper_search.core.services import Services
+from paper_tools.cli import context, render
+from paper_tools.cli.app import _force_utf8_streams, app
+from paper_tools.core.config import load_config
+from paper_tools.core.services import Services
 
 
 @pytest.fixture
@@ -316,9 +316,9 @@ def test_fetch_locators_config_default(cli: CliRunner, services: Services, tmp_p
 
 
 def test_search_multi_source(cli: CliRunner, services: Services) -> None:
-    from paper_search.core.models import Paper, SearchPage
-    from paper_search.core.plugins import PluginMeta
-    from paper_search.core.query import Query
+    from paper_tools.core.models import Paper, SearchPage
+    from paper_tools.core.plugins import PluginMeta
+    from paper_tools.core.query import Query
 
     class SecondSearcher:
         meta = PluginMeta(name="fake_b", version="0.1.0")

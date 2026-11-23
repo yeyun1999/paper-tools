@@ -6,8 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from paper_search.core.errors import PluginError, UsageError
-from paper_search.core.plugins import ROLE_GROUPS, PluginContext, PluginMeta, PluginRegistry
+from paper_tools.core.errors import PluginError, UsageError
+from paper_tools.core.plugins import ROLE_GROUPS, PluginContext, PluginMeta, PluginRegistry
 from tests.conftest import FakeDownloader, FakeExtractor, FakeLocator, FakeMetadata, FakeSearcher
 
 
@@ -60,16 +60,16 @@ def test_discovery_via_entry_points(
         raise RuntimeError("boom")
 
     def fake_entry_points(*, group: str) -> list[SimpleNamespace]:
-        if group == "paper_search.searchers":
+        if group == "paper_tools.searchers":
             return [SimpleNamespace(name="fake", load=lambda: FakeSearcher)]
-        if group == "paper_search.downloaders":
+        if group == "paper_tools.downloaders":
             return [
                 SimpleNamespace(name="broken", load=broken_load),
                 SimpleNamespace(name="fake_dl", load=lambda: FakeDownloader),
             ]
         return []
 
-    monkeypatch.setattr("paper_search.core.plugins.entry_points", fake_entry_points)
+    monkeypatch.setattr("paper_tools.core.plugins.entry_points", fake_entry_points)
     registry = PluginRegistry.discover(plugin_ctx)
     assert registry.names("searcher") == ["fake"]
     assert registry.names("downloader") == ["fake_dl"]

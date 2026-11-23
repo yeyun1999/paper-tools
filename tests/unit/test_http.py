@@ -8,9 +8,9 @@ import httpx
 import pytest
 import respx
 
-from paper_search.core.cache import Cache
-from paper_search.core.errors import UpstreamError
-from paper_search.core.http import HttpClient
+from paper_tools.core.cache import Cache
+from paper_tools.core.errors import UpstreamError
+from paper_tools.core.http import HttpClient
 
 
 def make_client(tmp_path: Path, **kwargs: object) -> tuple[HttpClient, list[float]]:

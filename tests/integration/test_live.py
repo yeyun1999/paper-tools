@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from paper_search.core.cache import Cache
-from paper_search.core.config import AppConfig, load_config
-from paper_search.core.errors import PaperSearchError, UpstreamError
-from paper_search.core.http import HttpClient
-from paper_search.core.models import Paper
-from paper_search.core.plugins import PluginContext, PluginRegistry
-from paper_search.core.query import Query
-from paper_search.core.services import Services
+from paper_tools.core.cache import Cache
+from paper_tools.core.config import AppConfig, load_config
+from paper_tools.core.errors import PaperToolsError, UpstreamError
+from paper_tools.core.http import HttpClient
+from paper_tools.core.models import Paper
+from paper_tools.core.plugins import PluginContext, PluginRegistry
+from paper_tools.core.query import Query
+from paper_tools.core.services import Services
 
 pytestmark = pytest.mark.live
 
@@ -103,7 +103,7 @@ def test_fetch_pdf_live(live_services: Services, tmp_path: Path) -> None:
             result, _ = live_services.fetch.fetch(
                 f"pmcid:{pmcid}", fmt="pdf", out_dir=tmp_path / "out"
             )
-        except PaperSearchError as exc:
+        except PaperToolsError as exc:
             errors.append(f"{pmcid}: {exc.message}")
             continue
         assert result.path.read_bytes().startswith(b"%PDF")
@@ -217,7 +217,7 @@ def test_get_batch_live() -> None:
 
 
 def test_mcp_stdio_full_flow_live(tmp_path: Path) -> None:
-    """Real `paper-search mcp` subprocess: search -> get -> fetch over stdio."""
+    """Real `paper-tools mcp` subprocess: search -> get -> fetch over stdio."""
     pytest.importorskip("mcp", reason="mcp extra not installed")
     import asyncio
     import json
@@ -235,7 +235,7 @@ def test_mcp_stdio_full_flow_live(tmp_path: Path) -> None:
     async def flow() -> Path:
         params = StdioServerParameters(
             command=sys.executable,
-            args=["-c", "from paper_search.cli.app import main; main()", "mcp"],
+            args=["-c", "from paper_tools.cli.app import main; main()", "mcp"],
         )
         async with (
             stdio_client(params) as (read, write),

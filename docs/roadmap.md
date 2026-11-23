@@ -1,8 +1,8 @@
-# paper-search 开发计划
+# paper-tools 开发计划
 
 > 配套架构设计见 [architecture.md](architecture.md)（v2，五类插件角色）。估算以人周计，总计约 6–7.5 人周；M2/M3 与 M4 部分任务可并行压缩。
 >
-> 状态：执行中。**M0–M5 已完成**，**M6 非发布部分完成**；feat/multi-source-search 分支增量：多源聚合搜索（去重+聚合游标）、get 批量 NDJSON、fulltext_links（**schema 1.1**，快照门禁同步）。203 个离线测试全绿 + live 冒烟（S2 无 key 共享限额时按设计跳过）；ruff/mypy strict 全绿。PyPI 发布待用户确定包名（paper-search / paper-search-cli 已被占用）与 token。
+> 状态：执行中。**M0–M5 已完成**（MCP stdio 全流程已验证；schema 快照门禁进 CI），**M6 非发布部分完成**：插件指南 / 模板 / bioRxiv 生态验证 / README 已完成，三包 uv build 通过；feat/multi-source-search 分支增量：多源聚合搜索（去重+聚合游标）、get 批量 NDJSON、fulltext_links（**schema 1.1**，快照门禁同步）。203 个主包离线测试 + 模板/bioRxiv 各 6 个全绿 + live 冒烟（S2 无 key 共享限额时按设计跳过）；ruff/mypy strict 全绿。包名已定为 `paper-tools`（原名 `paper-search` 在 PyPI 已被占用），发布待 token。
 
 ## 里程碑总览
 
@@ -29,7 +29,7 @@
 - [x] GitHub Actions：`uv sync --locked` → ruff → mypy → pytest（3.11/3.12/3.13 矩阵）
 - [x] README 草稿（定位、安装、合规声明）
 
-**验收**：`uv run paper-search --help` 与 `--version` 正常；`uv run pytest` 通过；提交 `uv.lock`；CI 全绿。
+**验收**：`uv run paper-tools --help` 与 `--version` 正常；`uv run pytest` 通过；提交 `uv.lock`；CI 全绿。
 
 ## M1 核心框架 + 五角色插件机制（1.5 周）
 
@@ -95,7 +95,7 @@
 
 **目标**：AI 助理两条通道（JSON CLI / MCP）都达到可日常使用的稳定度。
 
-- [x] extra `mcp`：官方 SDK（mcp>=2.0，MCPServer），`paper-search mcp`（stdio）；缺 extra 报 USAGE 并给安装指引
+- [x] extra `mcp`：官方 SDK（mcp>=2.0，MCPServer），`paper-tools mcp`（stdio）；缺 extra 报 USAGE 并给安装指引
 - [x] 四个工具：search_papers / get_paper / fetch_fulltext / list_sources，入参 schema 与 CLI 同源，返回同一 envelope
 - [x] `schema_version 1.0` 冻结；schema 快照测试进 CI 强制门禁（tests/snapshots/schema_v1.json + CHANGELOG）
 - [x] `examples/agent-usage.md`：shell 调用范式、退出码处理、NDJSON 批量、错误恢复建议（示例逐条实测可执行）
@@ -107,13 +107,13 @@
 
 **目标**：外部用户可安装，外部开发者可写插件。
 
-- [ ] `uv build` + `uv publish` 发布 PyPI；验证 `uvx paper-search` 与 `uv tool install paper-search`（build 已通过；包名被占用，发布待用户确定新名与 token）
+- [ ] `uv build` + `uv publish` 发布 PyPI；验证 `uvx paper-tools` 与 `uv tool install paper-tools`（build 已通过；包名已定为 `paper-tools`，发布待 token）
 - [x] `docs/plugin-guide.md`：五类角色接口、查询翻译表、配置命名空间、契约测试接入、多角色注册、发布流程
 - [x] 插件模板仓库（最小可运行 Searcher + MetadataProvider 示例，含 Locator/Downloader/Extractor 可选骨架）
 - [x] 以 bioRxiv 插件作为第三方案例验证扩展机制（模板派生，独立包安装后自动出现在 `sources`；真实 API 验证通过）
 - [x] README 完善：安装、快速上手、合规声明、插件生态链接
 
-**验收**：干净环境 `uvx paper-search search ...` 可用；模板插件 `uv pip install -e` 后自动注册并通过契约测试；PyPI 页面与文档链接完整。
+**验收**：干净环境 `uvx paper-tools search ...` 可用；模板插件 `uv pip install -e` 后自动注册并通过契约测试；PyPI 页面与文档链接完整。
 
 ---
 
@@ -123,7 +123,7 @@
 
 ```bash
 uv sync                      # 安装/同步环境（含 dev 组）
-uv run paper-search ...      # 运行 CLI
+uv run paper-tools ...      # 运行 CLI
 uv run pytest                # 测试（-m live 跑真实冒烟）
 uv run ruff check . && uv run ruff format --check .
 uv run mypy src

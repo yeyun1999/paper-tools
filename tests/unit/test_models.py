@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from paper_search.core.errors import UsageError
-from paper_search.core.models import (
+from paper_tools.core.errors import UsageError
+from paper_tools.core.models import (
     Author,
     FullTextCandidate,
     Paper,

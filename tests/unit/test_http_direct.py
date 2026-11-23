@@ -6,10 +6,10 @@ import httpx
 import pytest
 import respx
 
-from paper_search.core.errors import UsageError
-from paper_search.core.models import FullTextCandidate
-from paper_search.core.plugins import PluginContext
-from paper_search.plugins.http_direct import HttpDirectDownloader
+from paper_tools.core.errors import UsageError
+from paper_tools.core.models import FullTextCandidate
+from paper_tools.core.plugins import PluginContext
+from paper_tools.plugins.http_direct import HttpDirectDownloader
 from tests.conftest import PDF_BYTES
 
 

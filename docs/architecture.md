@@ -1,4 +1,4 @@
-# paper-search 架构设计
+# paper-tools 架构设计
 
 > 面向生物医学研究者的文献检索与全文获取 CLI。人类与 AI 助理双用户，检索、元数据补全、全文定位、下载、文本提取五类能力全部插件化，uv 管理环境。
 >
@@ -9,8 +9,8 @@
 - **核心场景**：按关键词/字段检索文献元数据与摘要；按 DOI/PMID 等标识符获取开放获取（OA）全文（PDF / JATS XML / 纯文本）。
 - **双用户**：
   - 研究者：Rich 表格、进度提示、可读的错误信息。
-  - AI 助理：所有命令支持 `--json`，字段稳定、退出码明确、错误结构化；后期提供 MCP 服务器（`paper-search mcp`）。
-- **插件化**：五类角色（检索 / 元数据补全 / 全文定位 / 下载 / 提取）都是插件，通过 Python entry points 发现。内置插件与第三方插件走完全相同的机制，`uv pip install paper-search-xxx` 即自动接入。
+  - AI 助理：所有命令支持 `--json`，字段稳定、退出码明确、错误结构化；后期提供 MCP 服务器（`paper-tools mcp`）。
+- **插件化**：五类角色（检索 / 元数据补全 / 全文定位 / 下载 / 提取）都是插件，通过 Python entry points 发现。内置插件与第三方插件走完全相同的机制，`uv pip install paper-tools-xxx` 即自动接入。
 - **合规边界**：只使用官方 API 与开放获取来源；不提供任何绕过付费墙的能力。订阅文献返回出版商链接与 OA 状态，由用户自行通过机构访问。
 - **环境管理**：uv 单一工具链（`uv sync` / `uv run` / `uv build` / `uv publish`），提交 `uv.lock`。
 
@@ -74,13 +74,13 @@ search ──► Paper 浅记录 ──enrich──► Paper 完整记录
 | XML 解析 | defusedxml | 上游 XML 不可信：禁实体展开/外部实体（防 XXE/billion laughs），兼容正常 JATS DOCTYPE |
 | 配置 | platformdirs + TOML | 跨平台用户配置目录，环境变量覆盖 |
 | 文本提取 | Extractor 插件：jats（内置）、pypdf（extra `text`） | 提取引擎与下载来源正交，可替换；GROBID 等重方案后续以插件接入 |
-| MCP | 官方 `mcp` SDK（extra `mcp`） | `paper-search mcp` 子命令，stdio 传输 |
+| MCP | 官方 `mcp` SDK（extra `mcp`） | `paper-tools mcp` 子命令，stdio 传输 |
 | 质量 | ruff（lint+format）、mypy、pytest + respx | respx 拦截 httpx 做录制回放测试 |
 
 ## 4. 目录结构
 
 ```
-paper-search/
+paper-tools/
 ├── pyproject.toml              # 依赖、entry points、工具配置
 ├── uv.lock
 ├── .python-version
@@ -89,9 +89,9 @@ paper-search/
 │   ├── architecture.md         # 本文档
 │   ├── roadmap.md              # 开发计划
 │   └── plugin-guide.md         # 插件开发指南（M6 交付）
-├── src/paper_search/
+├── src/paper_tools/
 │   ├── __init__.py             # __version__
-│   ├── __main__.py             # python -m paper_search
+│   ├── __main__.py             # python -m paper_tools
 │   ├── cli/
 │   │   ├── app.py              # Typer 根应用、全局选项、异常→退出码映射
 │   │   ├── search.py / get.py / fetch.py
@@ -228,46 +228,46 @@ class Query(BaseModel):
 
 | 角色 | Entry-point group | 职责 | 关键属性 |
 |---|---|---|---|
-| Searcher | `paper_search.searchers` | 关键词/字段检索，返回浅记录页 | — |
-| MetadataProvider | `paper_search.metadata` | 按标识符补全元数据（含按 ID 取详情） | `id_kinds`：可接受的标识符类型 |
-| Locator | `paper_search.locators` | 为 Paper 定位全文候选链接 | — |
-| Downloader | `paper_search.downloaders` | 下载候选并校验产物 | `formats`：支持的产物格式 |
-| Extractor | `paper_search.extractors` | PDF/XML → 纯文本 | `source_formats`：可处理的输入格式 |
+| Searcher | `paper_tools.searchers` | 关键词/字段检索，返回浅记录页 | — |
+| MetadataProvider | `paper_tools.metadata` | 按标识符补全元数据（含按 ID 取详情） | `id_kinds`：可接受的标识符类型 |
+| Locator | `paper_tools.locators` | 为 Paper 定位全文候选链接 | — |
+| Downloader | `paper_tools.downloaders` | 下载候选并校验产物 | `formats`：支持的产物格式 |
+| Extractor | `paper_tools.extractors` | PDF/XML → 纯文本 | `source_formats`：可处理的输入格式 |
 
 拆分原则：**按行为职责拆，不按数据格式拆**。文本与 PDF 的差异由格式校验器和 Extractor 阶段处理，下载接口不因格式分裂——同一来源（如 Europe PMC）既给 XML 又给 PDF，只注册一个 Downloader。而"定位"与"传输"是两种真实不同的行为：Unpaywall 只定位不下载，通用 HTTP 下载器只下载不定位，因此拆为 Locator / Downloader 两个接口。
 
 一个插件类可同时实现多个角色，注册到多个 group。内置插件在主包 `pyproject.toml` 中自我声明，与第三方完全同构：
 
 ```toml
-[project.entry-points."paper_search.searchers"]
-pubmed = "paper_search.plugins.pubmed:PubMedSearcher"
-europepmc = "paper_search.plugins.europepmc:EuropePmcSearcher"
-crossref = "paper_search.plugins.crossref:CrossrefSearcher"
-openalex = "paper_search.plugins.openalex:OpenAlexSearcher"
-semantic_scholar = "paper_search.plugins.semantic_scholar:SemanticScholarSearcher"
+[project.entry-points."paper_tools.searchers"]
+pubmed = "paper_tools.plugins.pubmed:PubMedSearcher"
+europepmc = "paper_tools.plugins.europepmc:EuropePmcSearcher"
+crossref = "paper_tools.plugins.crossref:CrossrefSearcher"
+openalex = "paper_tools.plugins.openalex:OpenAlexSearcher"
+semantic_scholar = "paper_tools.plugins.semantic_scholar:SemanticScholarSearcher"
 
-[project.entry-points."paper_search.metadata"]
-pubmed = "paper_search.plugins.pubmed:PubMedMetadata"
-europepmc = "paper_search.plugins.europepmc:EuropePmcMetadata"
-crossref = "paper_search.plugins.crossref:CrossrefMetadata"
-openalex = "paper_search.plugins.openalex:OpenAlexMetadata"
-semantic_scholar = "paper_search.plugins.semantic_scholar:SemanticScholarMetadata"
-unpaywall = "paper_search.plugins.unpaywall:UnpaywallMetadata"
+[project.entry-points."paper_tools.metadata"]
+pubmed = "paper_tools.plugins.pubmed:PubMedMetadata"
+europepmc = "paper_tools.plugins.europepmc:EuropePmcMetadata"
+crossref = "paper_tools.plugins.crossref:CrossrefMetadata"
+openalex = "paper_tools.plugins.openalex:OpenAlexMetadata"
+semantic_scholar = "paper_tools.plugins.semantic_scholar:SemanticScholarMetadata"
+unpaywall = "paper_tools.plugins.unpaywall:UnpaywallMetadata"
 
-[project.entry-points."paper_search.locators"]
-unpaywall = "paper_search.plugins.unpaywall:UnpaywallLocator"
-europepmc = "paper_search.plugins.europepmc:EuropePmcLocator"
-pmc_oa = "paper_search.plugins.pmc_oa:PmcOaLocator"
-openalex = "paper_search.plugins.openalex:OpenAlexLocator"
+[project.entry-points."paper_tools.locators"]
+unpaywall = "paper_tools.plugins.unpaywall:UnpaywallLocator"
+europepmc = "paper_tools.plugins.europepmc:EuropePmcLocator"
+pmc_oa = "paper_tools.plugins.pmc_oa:PmcOaLocator"
+openalex = "paper_tools.plugins.openalex:OpenAlexLocator"
 
-[project.entry-points."paper_search.downloaders"]
-europepmc = "paper_search.plugins.europepmc:EuropePmcDownloader"
-pmc_oa = "paper_search.plugins.pmc_oa:PmcOaDownloader"
-http_direct = "paper_search.plugins.http_direct:HttpDirectDownloader"
+[project.entry-points."paper_tools.downloaders"]
+europepmc = "paper_tools.plugins.europepmc:EuropePmcDownloader"
+pmc_oa = "paper_tools.plugins.pmc_oa:PmcOaDownloader"
+http_direct = "paper_tools.plugins.http_direct:HttpDirectDownloader"
 
-[project.entry-points."paper_search.extractors"]
-jats = "paper_search.plugins.jats:JatsExtractor"
-pypdf = "paper_search.plugins.pypdf_extractor:PypdfExtractor"
+[project.entry-points."paper_tools.extractors"]
+jats = "paper_tools.plugins.jats:JatsExtractor"
+pypdf = "paper_tools.plugins.pypdf_extractor:PypdfExtractor"
 ```
 
 - `PluginRegistry` 启动时按 group 扫描 entry points，实例化并注入 `PluginContext(config, http, cache)`；同名插件允许第三方覆盖内置（打印 warning），便于替换实现。
@@ -433,19 +433,19 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 
 ```bash
 # 研究者
-paper-search search "CRISPR base editing" --year-from 2020 --limit 20
-paper-search search "CRISPR base editing" --enrich          # 补全摘要/OA 状态
-paper-search fetch doi:10.1038/s41586-020-2649-2 --format pdf --out papers/
+paper-tools search "CRISPR base editing" --year-from 2020 --limit 20
+paper-tools search "CRISPR base editing" --enrich          # 补全摘要/OA 状态
+paper-tools fetch doi:10.1038/s41586-020-2649-2 --format pdf --out papers/
 
 # AI 助理
-paper-search search "CRISPR base editing" --source pubmed --limit 10 --json
-paper-search get pmid:12345678 --fields title,doi,abstract --json
-paper-search fetch doi:10.1038/s41586-020-2649-2 --format text --json
+paper-tools search "CRISPR base editing" --source pubmed --limit 10 --json
+paper-tools get pmid:12345678 --fields title,doi,abstract --json
+paper-tools fetch doi:10.1038/s41586-020-2649-2 --format text --json
 ```
 
 ## 10. MCP 服务器（M5，已实现）
 
-- 可选依赖：extra `mcp`（官方 SDK `mcp>=2.0`，`MCPServer`）；`uv sync --extra mcp` 后运行 `paper-search mcp`（stdio）。缺 extra 时命令报 USAGE（退出码 2）并给出安装指引；SDK 惰性导入，核心 CLI 不依赖 extra。
+- 可选依赖：extra `mcp`（官方 SDK `mcp>=2.0`，`MCPServer`）；`uv sync --extra mcp` 后运行 `paper-tools mcp`（stdio）。缺 extra 时命令报 USAGE（退出码 2）并给出安装指引；SDK 惰性导入，核心 CLI 不依赖 extra。
 - 直接复用服务层（与 CLI 同一 `context.build_services`），暴露四个工具：
 
 | MCP 工具 | 对应服务 | 返回 |
@@ -462,9 +462,9 @@ paper-search fetch doi:10.1038/s41586-020-2649-2 --format text --json
 
 ## 11. 配置系统
 
-优先级：CLI 选项 > 环境变量（`PAPER_SEARCH_*`）> 配置文件 > 默认值。
+优先级：CLI 选项 > 环境变量（`PAPER_TOOLS_*`）> 配置文件 > 默认值。
 
-配置文件位置由 platformdirs 决定（Windows: `%APPDATA%/paper-search/config.toml`）。示例：
+配置文件位置由 platformdirs 决定（Windows: `%APPDATA%/paper-tools/config.toml`）。示例：
 
 ```toml
 [general]
@@ -473,7 +473,7 @@ timeout = 30
 mailto = "you@lab.org"          # 用于 UA 与 Crossref/OpenAlex polite pool
 
 [plugins.pubmed]
-api_key = "..."                 # 或 PAPER_SEARCH_PUBMED__API_KEY（双下划线分隔插件与选项）
+api_key = "..."                 # 或 PAPER_TOOLS_PUBMED__API_KEY（双下划线分隔插件与选项）
 
 [plugins.unpaywall]
 email = "you@lab.org"           # Unpaywall 必填
@@ -499,7 +499,7 @@ enrich_priority = ["pubmed", "europepmc", "crossref", "openalex", "semantic_scho
 
 ### 12.1 HTTP 封装（core/http.py）
 
-- 统一 `httpx.Client`：默认超时 30s，UA `paper-search/<version> (+<mailto>)`。
+- 统一 `httpx.Client`：默认超时 30s，UA `paper-tools/<version> (+<mailto>)`。
 - **按 host 令牌桶限流**，默认值可配置：
 
 | Host | 默认速率 | 说明 |

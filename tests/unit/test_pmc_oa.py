@@ -9,10 +9,10 @@ import httpx
 import pytest
 import respx
 
-from paper_search.core.errors import UpstreamError
-from paper_search.core.models import FullTextCandidate, Paper
-from paper_search.core.plugins import PluginContext
-from paper_search.plugins.pmc_oa import IDCONV, OA_SERVICE, PmcOaDownloader, PmcOaLocator
+from paper_tools.core.errors import UpstreamError
+from paper_tools.core.models import FullTextCandidate, Paper
+from paper_tools.core.plugins import PluginContext
+from paper_tools.plugins.pmc_oa import IDCONV, OA_SERVICE, PmcOaDownloader, PmcOaLocator
 from tests.conftest import PDF_BYTES, XML_BYTES
 
 TGZ_URL = "https://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_package/ab/cd/PMC123.tar.gz"

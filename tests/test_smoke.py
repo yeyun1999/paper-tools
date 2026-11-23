@@ -2,8 +2,8 @@
 
 from typer.testing import CliRunner
 
-from paper_search import __version__
-from paper_search.cli.app import app
+from paper_tools import __version__
+from paper_tools.cli.app import app
 
 
 def test_version() -> None:

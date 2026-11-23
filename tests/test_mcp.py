@@ -16,10 +16,10 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from typer.testing import CliRunner
 
-from paper_search import mcp_server
-from paper_search.cli import context, render
-from paper_search.cli.app import app
-from paper_search.core.errors import UsageError
+from paper_tools import mcp_server
+from paper_tools.cli import context, render
+from paper_tools.cli.app import app
+from paper_tools.core.errors import UsageError
 from tests.conftest import make_services
 
 
@@ -218,12 +218,12 @@ def test_cli_mcp_missing_extra_exit_code(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_stdio_roundtrip() -> None:
-    """Real `paper-search mcp` subprocess: initialize, list tools, call one."""
+    """Real `paper-tools mcp` subprocess: initialize, list tools, call one."""
 
     async def roundtrip() -> tuple[set[str], dict[str, Any]]:
         params = StdioServerParameters(
             command=sys.executable,
-            args=["-c", "from paper_search.cli.app import main; main()", "mcp"],
+            args=["-c", "from paper_tools.cli.app import main; main()", "mcp"],
         )
         async with (
             stdio_client(params) as (read, write),

@@ -7,17 +7,17 @@ from pathlib import Path
 
 import pytest
 
-from paper_search.core.errors import (
+from paper_tools.core.errors import (
     ConfigError,
     FullTextUnavailableError,
     NotFoundError,
     UpstreamError,
     UsageError,
 )
-from paper_search.core.models import FullTextCandidate, Paper, SearchPage
-from paper_search.core.plugins import PluginMeta
-from paper_search.core.query import Query
-from paper_search.core.services import Services
+from paper_tools.core.models import FullTextCandidate, Paper, SearchPage
+from paper_tools.core.plugins import PluginMeta
+from paper_tools.core.query import Query
+from paper_tools.core.services import Services
 
 
 def test_search_default_source(services: Services) -> None:
