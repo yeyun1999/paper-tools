@@ -10,10 +10,10 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from paper_search.cli import context
-from paper_search.cli.app import _force_utf8_streams, app
-from paper_search.core.config import load_config
-from paper_search.core.services import Services
+from paper_tools.cli import context
+from paper_tools.cli.app import _force_utf8_streams, app
+from paper_tools.core.config import load_config
+from paper_tools.core.services import Services
 
 
 @pytest.fixture

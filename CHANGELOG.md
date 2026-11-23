@@ -8,6 +8,13 @@ JSON 契约（`schema_version`）自 M5 起冻结为 **1.0**：任何字段变�
 
 ### 变更
 
+- **项目更名**：因 PyPI 上 `paper-search` 名称已被占用，包名、CLI 命令、Python 导入名
+  及配套标识符全部改为 `paper-tools` / `paper_tools`：分发名 `paper-search`→`paper-tools`，
+  模块 `paper_search`→`paper_tools`，命令 `paper-search`→`paper-tools`，环境变量前缀
+  `PAPER_SEARCH_`→`PAPER_TOOLS_`，异常基类 `PaperSearchError`→`PaperToolsError`，
+  entry-point 组 `paper_search.*`→`paper_tools.*`，User-Agent 与配置/缓存目录名同步更新，
+  插件包 `paper-search-biorxiv`→`paper-tools-biorxiv`、模板 `paper-search-plugin-template`→
+  `paper-tools-plugin-template`。未发布阶段无兼容负担，旧名不做别名保留。
 - **定位阶段配置错误不再阻断 fetch**：Locator 的 `ConfigError`（如 Unpaywall 缺 email）
   降级为 warning 并跳过该定位器，其余定位器照常工作；补全链（`get`/`--enrich`）保持
   严格传播（退出码 5）。
@@ -36,8 +43,8 @@ JSON 契约（`schema_version`）自 M5 起冻结为 **1.0**：任何字段变�
   最小可运行插件模板（Searcher + MetadataProvider + 可选角色骨架，respx + 契约测试）；
   `plugins-biorxiv/` 第三方验证案例（bioRxiv/medRxiv 官方 details API 元数据插件，
   安装后自动注册，真实 API 验证通过）。主包与两插件包 `uv build` 通过。
-  PyPI 发布待包名确定（paper-search / paper-search-cli 已被占用）。
-- **M5 MCP 服务器**：`paper-search mcp`（stdio，extra `mcp`，依赖官方 SDK `mcp>=2.0`）。
+  PyPI 发布待包名确定（原候选名 `paper-search` 已被占用，后定为 `paper-tools`）。
+- **M5 MCP 服务器**：`paper-tools mcp`（stdio，extra `mcp`，依赖官方 SDK `mcp>=2.0`）。
   四个工具 `search_papers` / `get_paper` / `fetch_fulltext` / `list_sources`，
   入参语义与 CLI 选项同源，返回与 `--json` 完全一致的 envelope（schema_version 1.0）。
   缺 extra 时 CLI 报 USAGE（退出码 2）并给出安装指引。

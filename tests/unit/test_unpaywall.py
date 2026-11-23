@@ -6,10 +6,10 @@ import httpx
 import pytest
 import respx
 
-from paper_search.core.errors import ConfigError
-from paper_search.core.models import Paper
-from paper_search.core.plugins import PluginContext
-from paper_search.plugins.unpaywall import API_BASE, UnpaywallLocator, UnpaywallMetadata
+from paper_tools.core.errors import ConfigError
+from paper_tools.core.models import Paper
+from paper_tools.core.plugins import PluginContext
+from paper_tools.plugins.unpaywall import API_BASE, UnpaywallLocator, UnpaywallMetadata
 
 DOI_URL = API_BASE + "10.1234/abc"
 

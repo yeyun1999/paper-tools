@@ -14,9 +14,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from paper_search.cli import render
-from paper_search.cli.schema import _MODELS
-from paper_search.core.errors import UsageError
+from paper_tools.cli import render
+from paper_tools.cli.schema import _MODELS
+from paper_tools.core.errors import UsageError
 
 SNAPSHOT_PATH = Path(__file__).parent / "snapshots" / "schema_v1.json"
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from paper_search.core.query import Query
+from paper_tools.core.query import Query
 
 
 def test_structured_query() -> None:

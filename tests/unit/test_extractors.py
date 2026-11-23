@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from paper_search.core.errors import UpstreamError
-from paper_search.core.plugins import PluginContext
-from paper_search.plugins.jats import JatsExtractor
-from paper_search.plugins.pypdf_extractor import PypdfExtractor
+from paper_tools.core.errors import UpstreamError
+from paper_tools.core.plugins import PluginContext
+from paper_tools.plugins.jats import JatsExtractor
+from paper_tools.plugins.pypdf_extractor import PypdfExtractor
 
 JATS_XML = b"""<?xml version="1.0"?>
 <article>

@@ -7,13 +7,13 @@ from pathlib import Path
 import httpx
 import pytest
 import respx
-from paper_search.core.cache import Cache
-from paper_search.core.config import AppConfig
-from paper_search.core.http import HttpClient
-from paper_search.core.models import Paper
-from paper_search.core.plugins import PluginContext
+from paper_tools.core.cache import Cache
+from paper_tools.core.config import AppConfig
+from paper_tools.core.http import HttpClient
+from paper_tools.core.models import Paper
+from paper_tools.core.plugins import PluginContext
 
-from paper_search_biorxiv.metadata import API_BASE, BiorxivMetadata
+from paper_tools_biorxiv.metadata import API_BASE, BiorxivMetadata
 
 DOI = "10.1101/2020.03.09.984229"
 

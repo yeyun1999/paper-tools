@@ -5,10 +5,10 @@ from __future__ import annotations
 import httpx
 import respx
 
-from paper_search.core.models import Paper
-from paper_search.core.plugins import PluginContext
-from paper_search.core.query import Query
-from paper_search.plugins.openalex import (
+from paper_tools.core.models import Paper
+from paper_tools.core.plugins import PluginContext
+from paper_tools.core.query import Query
+from paper_tools.plugins.openalex import (
     WORKS_URL,
     OpenAlexLocator,
     OpenAlexMetadata,

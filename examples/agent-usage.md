@@ -1,9 +1,9 @@
 # AI 助理使用指南（agent-usage）
 
-paper-search 为 AI 助理提供两条通道，契约完全一致（`schema_version 1.0`）：
+paper-tools 为 AI 助理提供两条通道，契约完全一致（`schema_version 1.0`）：
 
-1. **JSON CLI**：任意 shell 调用 `paper-search ... --json`，按退出码分支。
-2. **MCP 服务器**：`paper-search mcp`（stdio），四个工具，返回同样的 envelope。
+1. **JSON CLI**：任意 shell 调用 `paper-tools ... --json`，按退出码分支。
+2. **MCP 服务器**：`paper-tools mcp`（stdio），四个工具，返回同样的 envelope。
 
 所有示例均在仓库根目录、`uv sync --all-extras` 后可直接执行（`uv run` 前缀可换成已激活环境的裸命令）。
 
@@ -11,15 +11,15 @@ paper-search 为 AI 助理提供两条通道，契约完全一致（`schema_vers
 
 ```bash
 # Unpaywall OA 定位需要 email（官方 API 政策）
-uv run paper-search config set plugins.unpaywall.email you@example.com
+uv run paper-tools config set plugins.unpaywall.email you@example.com
 # 可选：Crossref/OpenAlex polite pool
-uv run paper-search config set general.mailto you@example.com
+uv run paper-tools config set general.mailto you@example.com
 # 可选：Semantic Scholar 无 key 共享限额很低，批量场景建议申请
-uv run paper-search config set plugins.semantic_scholar.api_key YOUR_KEY
+uv run paper-tools config set plugins.semantic_scholar.api_key YOUR_KEY
 # 可选：OpenAlex key（Authorization: Bearer，配后限流 5→10 req/s）
-uv run paper-search config set plugins.openalex.api_key YOUR_KEY
+uv run paper-tools config set plugins.openalex.api_key YOUR_KEY
 # 可选：默认 Locator 列表（空 = 全部；--locator 可临时覆盖：重复指定或逗号分隔，'all' 强制全部）
-uv run paper-search config set fetch.locators '["pmc_oa","europepmc"]'
+uv run paper-tools config set fetch.locators '["pmc_oa","europepmc"]'
 ```
 
 密钥只进配置/环境变量，绝不出现在日志与 JSON 输出中。
@@ -30,27 +30,27 @@ uv run paper-search config set fetch.locators '["pmc_oa","europepmc"]'
 
 ```bash
 # 检索（浅记录，省上下文）；--enrich 补全摘要/OA 状态
-uv run paper-search search "CRISPR base editing" --source pubmed --limit 10 --json
-uv run paper-search search "CRISPR base editing" --source europepmc --oa-only --enrich --json
+uv run paper-tools search "CRISPR base editing" --source pubmed --limit 10 --json
+uv run paper-tools search "CRISPR base editing" --source europepmc --oa-only --enrich --json
 
 # 字段裁剪：只要标题/DOI/年份（identifiers 内的键会被提升）
-uv run paper-search search "CRISPR base editing" --fields title,doi,year --json
+uv run paper-tools search "CRISPR base editing" --fields title,doi,year --json
 
 # 单篇完整元数据（补全链：pubmed→europepmc→crossref→openalex→s2→unpaywall）
-uv run paper-search get pmid:38308006 --json
-uv run paper-search get doi:10.1038/s41586-020-2649-2 --fields title,doi,abstract,oa_status --json
+uv run paper-tools get pmid:38308006 --json
+uv run paper-tools get doi:10.1038/s41586-020-2649-2 --fields title,doi,abstract,oa_status --json
 
 # OA 全文：pdf / xml / text（text 走 下载→提取 流水线，优先 XML）
-uv run paper-search fetch pmcid:PMC13434336 --format text --out papers/ --json
-uv run paper-search fetch doi:10.1093/nar/gkag769 --format pdf --json
+uv run paper-tools fetch pmcid:PMC13434336 --format text --out papers/ --json
+uv run paper-tools fetch doi:10.1093/nar/gkag769 --format pdf --json
 
 # 分页：取 next_cursor 续传
-uv run paper-search search "CRISPR" --limit 20 --json          # data.next_cursor
-uv run paper-search search "CRISPR" --limit 20 --cursor "<next_cursor>" --json
+uv run paper-tools search "CRISPR" --limit 20 --json          # data.next_cursor
+uv run paper-tools search "CRISPR" --limit 20 --cursor "<next_cursor>" --json
 
 # 能力发现与契约
-uv run paper-search sources --json        # 五角色全部插件（检索/元数据/定位/下载/提取）
-uv run paper-search schema fetch          # FullText 的 JSON Schema
+uv run paper-tools sources --json        # 五角色全部插件（检索/元数据/定位/下载/提取）
+uv run paper-tools schema fetch          # FullText 的 JSON Schema
 ```
 
 成功 envelope：
@@ -79,7 +79,7 @@ uv run paper-search schema fetch          # FullText 的 JSON Schema
 进程级错误（2/3/5）的 error envelope 在 **stderr**；`fetch` 的逐 ID 错误（3/4）作为结果行写在 **stdout**（见下节）。
 
 ```bash
-uv run paper-search fetch doi:10.1001/jama.2020.2648 --format pdf --json
+uv run paper-tools fetch doi:10.1001/jama.2020.2648 --format pdf --json
 # 退出码 4；stdout: {"error": {"code": "FULLTEXT_UNAVAILABLE", "details": {"publisher_url": "…"}}}
 ```
 
@@ -88,7 +88,7 @@ uv run paper-search fetch doi:10.1001/jama.2020.2648 --format pdf --json
 多 ID `fetch --json` 输出 NDJSON：每行一个独立 envelope（成功或错误），单 ID 失败不中断批次；进程退出码取第一个失败行的错误码。
 
 ```bash
-uv run paper-search fetch pmcid:PMC13434336 doi:10.1038/s41586-020-2649-2 doi:10.1001/jama.2020.2648 \
+uv run paper-tools fetch pmcid:PMC13434336 doi:10.1038/s41586-020-2649-2 doi:10.1001/jama.2020.2648 \
   --format text --out papers/ --json > batch.ndjson
 ```
 
@@ -133,15 +133,15 @@ uv sync --extra mcp
 ```json
 {
   "mcpServers": {
-    "paper-search": {
+    "paper-tools": {
       "command": "uv",
-      "args": ["run", "--directory", "C:/MyCode/qoder/paper-search", "paper-search", "mcp"]
+      "args": ["run", "--directory", "C:/MyCode/qoder/paper-tools", "paper-tools", "mcp"]
     }
   }
 }
 ```
 
-发布到 PyPI 后可简化为 `{"command": "uvx", "args": ["--from", "paper-search[mcp]", "paper-search", "mcp"]}`。
+发布到 PyPI 后可简化为 `{"command": "uvx", "args": ["--from", "paper-tools[mcp]", "paper-tools", "mcp"]}`。
 
 四个工具（入参语义与 CLI 选项一一对应）：
 

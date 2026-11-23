@@ -1,5 +1,5 @@
 [project]
-name = "paper-search"
+name = "paper-tools"
 version = "0.1.0"
 description = "Literature search and open-access full-text retrieval CLI for biomedical researchers and AI assistants"
 readme = "README.md"
@@ -22,37 +22,37 @@ mcp = [
 ]
 
 [project.scripts]
-paper-search = "paper_search.cli.app:main"
+paper-tools = "paper_tools.cli.app:main"
 
-[project.entry-points."paper_search.searchers"]
-pubmed = "paper_search.plugins.pubmed:PubMedSearcher"
-europepmc = "paper_search.plugins.europepmc:EuropePmcSearcher"
-crossref = "paper_search.plugins.crossref:CrossrefSearcher"
-openalex = "paper_search.plugins.openalex:OpenAlexSearcher"
-semantic_scholar = "paper_search.plugins.semantic_scholar:SemanticScholarSearcher"
+[project.entry-points."paper_tools.searchers"]
+pubmed = "paper_tools.plugins.pubmed:PubMedSearcher"
+europepmc = "paper_tools.plugins.europepmc:EuropePmcSearcher"
+crossref = "paper_tools.plugins.crossref:CrossrefSearcher"
+openalex = "paper_tools.plugins.openalex:OpenAlexSearcher"
+semantic_scholar = "paper_tools.plugins.semantic_scholar:SemanticScholarSearcher"
 
-[project.entry-points."paper_search.metadata"]
-pubmed = "paper_search.plugins.pubmed:PubMedMetadata"
-europepmc = "paper_search.plugins.europepmc:EuropePmcMetadata"
-unpaywall = "paper_search.plugins.unpaywall:UnpaywallMetadata"
-crossref = "paper_search.plugins.crossref:CrossrefMetadata"
-openalex = "paper_search.plugins.openalex:OpenAlexMetadata"
-semantic_scholar = "paper_search.plugins.semantic_scholar:SemanticScholarMetadata"
+[project.entry-points."paper_tools.metadata"]
+pubmed = "paper_tools.plugins.pubmed:PubMedMetadata"
+europepmc = "paper_tools.plugins.europepmc:EuropePmcMetadata"
+unpaywall = "paper_tools.plugins.unpaywall:UnpaywallMetadata"
+crossref = "paper_tools.plugins.crossref:CrossrefMetadata"
+openalex = "paper_tools.plugins.openalex:OpenAlexMetadata"
+semantic_scholar = "paper_tools.plugins.semantic_scholar:SemanticScholarMetadata"
 
-[project.entry-points."paper_search.locators"]
-europepmc = "paper_search.plugins.europepmc:EuropePmcLocator"
-pmc_oa = "paper_search.plugins.pmc_oa:PmcOaLocator"
-unpaywall = "paper_search.plugins.unpaywall:UnpaywallLocator"
-openalex = "paper_search.plugins.openalex:OpenAlexLocator"
+[project.entry-points."paper_tools.locators"]
+europepmc = "paper_tools.plugins.europepmc:EuropePmcLocator"
+pmc_oa = "paper_tools.plugins.pmc_oa:PmcOaLocator"
+unpaywall = "paper_tools.plugins.unpaywall:UnpaywallLocator"
+openalex = "paper_tools.plugins.openalex:OpenAlexLocator"
 
-[project.entry-points."paper_search.downloaders"]
-europepmc = "paper_search.plugins.europepmc:EuropePmcDownloader"
-pmc_oa = "paper_search.plugins.pmc_oa:PmcOaDownloader"
-http_direct = "paper_search.plugins.http_direct:HttpDirectDownloader"
+[project.entry-points."paper_tools.downloaders"]
+europepmc = "paper_tools.plugins.europepmc:EuropePmcDownloader"
+pmc_oa = "paper_tools.plugins.pmc_oa:PmcOaDownloader"
+http_direct = "paper_tools.plugins.http_direct:HttpDirectDownloader"
 
-[project.entry-points."paper_search.extractors"]
-jats = "paper_search.plugins.jats:JatsExtractor"
-pypdf = "paper_search.plugins.pypdf_extractor:PypdfExtractor"
+[project.entry-points."paper_tools.extractors"]
+jats = "paper_tools.plugins.jats:JatsExtractor"
+pypdf = "paper_tools.plugins.pypdf_extractor:PypdfExtractor"
 
 [dependency-groups]
 dev = [
@@ -68,7 +68,7 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/paper_search"]
+packages = ["src/paper_tools"]
 
 [tool.ruff]
 line-length = 100

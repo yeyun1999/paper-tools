@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from paper_search.core.config import (
+from paper_tools.core.config import (
     load_config,
     mask_secrets,
     set_config_value,
 )
-from paper_search.core.errors import UsageError
+from paper_tools.core.errors import UsageError
 
 
 def test_defaults() -> None:
@@ -35,8 +35,8 @@ def test_file_loading(tmp_path: Path) -> None:
 def test_env_overrides_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = tmp_path / "config.toml"
     path.write_text("[general]\ntimeout = 10\n", encoding="utf-8")
-    monkeypatch.setenv("PAPER_SEARCH_TIMEOUT", "99")
-    monkeypatch.setenv("PAPER_SEARCH_SEMANTIC_SCHOLAR__API_KEY", "secret123")
+    monkeypatch.setenv("PAPER_TOOLS_TIMEOUT", "99")
+    monkeypatch.setenv("PAPER_TOOLS_SEMANTIC_SCHOLAR__API_KEY", "secret123")
     config = load_config(path)
     assert config.general.timeout == 99.0
     assert config.plugin_config("semantic_scholar")["api_key"] == "secret123"

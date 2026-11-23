@@ -155,7 +155,7 @@ wheels = [
 ]
 
 [[package]]
-name = "paper-search"
+name = "paper-tools"
 version = "0.1.0"
 source = { editable = "../" }
 dependencies = [
@@ -194,11 +194,11 @@ dev = [
 ]
 
 [[package]]
-name = "paper-search-biorxiv"
+name = "paper-tools-biorxiv"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "paper-search" },
+    { name = "paper-tools" },
 ]
 
 [package.dev-dependencies]
@@ -209,7 +209,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "paper-search", editable = "../" }]
+requires-dist = [{ name = "paper-tools", editable = "../" }]
 
 [package.metadata.requires-dev]
 dev = [

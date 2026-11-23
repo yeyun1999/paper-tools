@@ -10,15 +10,15 @@ from pathlib import Path
 import httpx
 import pytest
 import respx
-from paper_search.core.cache import Cache
-from paper_search.core.config import AppConfig
-from paper_search.core.http import HttpClient
-from paper_search.core.models import Paper
-from paper_search.core.plugins import PluginContext
-from paper_search.core.query import Query
+from paper_tools.core.cache import Cache
+from paper_tools.core.config import AppConfig
+from paper_tools.core.http import HttpClient
+from paper_tools.core.models import Paper
+from paper_tools.core.plugins import PluginContext
+from paper_tools.core.query import Query
 
-from paper_search_example.metadata import ExampleMetadata
-from paper_search_example.searcher import BASE_URL, ExampleSearcher
+from paper_tools_example.metadata import ExampleMetadata
+from paper_tools_example.searcher import BASE_URL, ExampleSearcher
 
 ROW = {
     "doi": "10.1234/ABC",
