@@ -204,7 +204,7 @@ def test_get_batch_live() -> None:
 
     from typer.testing import CliRunner
 
-    from paper_search.cli.app import app
+    from paper_tools.cli.app import app
 
     result = CliRunner().invoke(app, ["get", "pmid:38308006", _NUMPY_DOI, "--json"])
     assert result.exit_code == 0, result.stdout
