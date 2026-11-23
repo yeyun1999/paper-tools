@@ -43,6 +43,9 @@ JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.1**）：任何�
 
 ### 新增
 
+- **MIT 许可证与发布元数据**：新增 `LICENSE`；`pyproject.toml` 补 `license` /
+  `license-files` / `authors` / `keywords` / `classifiers`，sdist 排除
+  `plugin-template`、`plugins-biorxiv`、`.github`（子项目为独立分发包）。
 - **多源聚合搜索**：`search --source` 支持重复指定 / 逗号分隔 / `all`（MCP `search_papers`
   的 `source` 同语义）。多源并发检索，按 DOI→PMID→标题指纹去重，`merge_papers` 合并
   （identifiers 并集、sources 溯源、冲突告警），轮转交错排序；失败源降级 warning。
