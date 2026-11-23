@@ -86,6 +86,8 @@ JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.1**）：任何�
 ### 修复
 
 - Windows GBK 控制台输出非 ASCII 崩溃：CLI 强制 UTF-8 stdout/stderr。
+- `--version` 恒报 `0.0.0`：分发改名为 `paper-tools-cli` 后 `importlib.metadata.version()`
+  查的是旧名，落入 fallback 分支。已改查新分发名，并加回归测试（0.1.0 发布版含此缺陷）。
 - `fetch --format text` 二次调用缓存命中被误当 XML 重新校验：缓存改存最终产物并跳过重复校验。
 - 补全链与定位阶段吞掉 ConfigError：改为直接传播（退出码 5）。
 - HTTP 重试耗尽错误信息缺失状态码：details 现含最后一次上游状态码。

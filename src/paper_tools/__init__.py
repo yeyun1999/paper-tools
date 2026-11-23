@@ -3,6 +3,6 @@
 from importlib.metadata import PackageNotFoundError, version
 
 try:
-    __version__ = version("paper-tools")
+    __version__ = version("paper-tools-cli")
 except PackageNotFoundError:  # pragma: no cover - running from source without install
     __version__ = "0.0.0"

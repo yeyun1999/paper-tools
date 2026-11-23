@@ -5,11 +5,13 @@ from __future__ import annotations
 import io
 import json
 import sys
+from importlib.metadata import version
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
+from paper_tools import __version__
 from paper_tools.cli import context, render
 from paper_tools.cli.app import _force_utf8_streams, app
 from paper_tools.core.config import load_config
@@ -20,6 +22,14 @@ from paper_tools.core.services import Services
 def cli(services: Services, monkeypatch: pytest.MonkeyPatch) -> CliRunner:
     monkeypatch.setattr(context, "build_services", lambda opts: services)
     return CliRunner()
+
+
+def test_version_matches_distribution(cli: CliRunner) -> None:
+    result = cli.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert result.stdout.strip() == f"paper-tools {__version__}"
+    # Guards the distribution rename: a stale lookup name silently reports 0.0.0.
+    assert __version__ == version("paper-tools-cli") != "0.0.0"
 
 
 def test_search_json(cli: CliRunner) -> None:
