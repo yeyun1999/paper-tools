@@ -66,6 +66,15 @@ def build_server(opts: GlobalOpts | None = None) -> MCPServer[Any]:
     def _failure(exc: PaperToolsError) -> dict[str, Any]:
         return render.error_envelope(exc)
 
+    # Mirror the CLI help: list installed plugin names per role and show
+    # resolved config values (not config key names) as defaults.
+    def _available(role: str) -> str:
+        return ", ".join(services.registry.names(role)) or "(none)"
+
+    default_source = services.config.general.default_source
+    default_locators = ", ".join(services.config.fetch.locators) or "all"
+    default_out_dir = services.config.fetch.out_dir
+
     @server.tool(
         description=(
             "Search literature. Returns a SearchPage envelope (items may be stubs; "
@@ -74,15 +83,13 @@ def build_server(opts: GlobalOpts | None = None) -> MCPServer[Any]:
     )
     def search_papers(
         query: Annotated[str | None, Field(description="Free-text query.")] = None,
-        source: Annotated[
-            str | None,
-            Field(
-                description=(
-                    "Search plugin(s), comma-separated; 'all' searches every source "
-                    "with dedup (default: general.default_source)."
-                )
+        source: str | None = Field(
+            default=None,
+            description=(
+                "Search plugin(s), comma-separated; 'all' searches every source "
+                f"with dedup (default: {default_source}). Available: {_available('searcher')}."
             ),
-        ] = None,
+        ),
         limit: Annotated[int, Field(ge=1, le=100, description="Max results (1-100).")] = 20,
         cursor: Annotated[
             str | None, Field(description="Pagination cursor from next_cursor.")
@@ -130,10 +137,21 @@ def build_server(opts: GlobalOpts | None = None) -> MCPServer[Any]:
         )
     )
     def get_paper(
-        identifier: Annotated[str, Field(description="e.g. doi:10.1038/... or pmid:38308006.")],
-        source: Annotated[
-            str | None, Field(description="Restrict enrichment to one metadata plugin.")
-        ] = None,
+        identifier: Annotated[
+            str,
+            Field(
+                description=(
+                    "doi:/pmid:/pmcid:/openalex:/s2:/arxiv: prefixed ID, DOI URL, "
+                    "or bare DOI (e.g. doi:10.1038/... or pmid:38308006)."
+                )
+            ),
+        ],
+        source: str | None = Field(
+            default=None,
+            description=(
+                f"Restrict enrichment to one metadata plugin. Available: {_available('metadata')}."
+            ),
+        ),
     ) -> dict[str, Any]:
         try:
             ident = parse_identifier(identifier)
@@ -154,21 +172,32 @@ def build_server(opts: GlobalOpts | None = None) -> MCPServer[Any]:
     )
     def fetch_fulltext(
         identifier: Annotated[str, Field(description="doi:/pmid:/pmcid: ID or bare DOI.")],
-        format: Annotated[str, Field(description="pdf | xml | text")] = "pdf",
-        out_dir: Annotated[
-            str | None, Field(description="Output directory (default: ./papers).")
-        ] = None,
-        locator: Annotated[
-            str | None,
-            Field(
-                description=(
-                    "Comma-separated locator plugins to restrict to; 'all' forces every "
-                    "registered locator (default: fetch.locators config, else all)."
-                )
+        format: Annotated[
+            str, Field(description="Output format: pdf | xml | text (download + extract).")
+        ] = "pdf",
+        out_dir: str | None = Field(
+            default=None,
+            description=f"Output directory (default: {default_out_dir}).",
+        ),
+        locator: str | None = Field(
+            default=None,
+            description=(
+                "Locator plugins to restrict to, comma-separated; 'all' forces every "
+                f"registered locator (default: {default_locators}). "
+                f"Available: {_available('locator')}."
             ),
-        ] = None,
-        downloader: Annotated[str | None, Field(description="Force a downloader plugin.")] = None,
-        extractor: Annotated[str | None, Field(description="Force an extractor plugin.")] = None,
+        ),
+        downloader: str | None = Field(
+            default=None,
+            description=f"Force a downloader plugin. Available: {_available('downloader')}.",
+        ),
+        extractor: str | None = Field(
+            default=None,
+            description=(
+                f"Force an extractor plugin for format='text'. "
+                f"Available: {_available('extractor')}."
+            ),
+        ),
     ) -> dict[str, Any]:
         try:
             if format not in ("pdf", "xml", "text"):

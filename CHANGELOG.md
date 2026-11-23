@@ -44,6 +44,10 @@ JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.1**）：任何�
   searcher/metadata/locator/downloader/extractor 五个分组。MCP `list_sources` 本就返回全角色，不受影响。
 - `search --source` 帮助动态列出可用检索插件与实际默认源；`get --source`、
   `fetch --locator/--downloader/--extractor` 帮助同样列出各角色可用插件；补齐全部选项描述。
+- **MCP 工具参数说明与 CLI 帮助对齐**：`search_papers.source`、`get_paper.source`、
+  `fetch_fulltext.locator/downloader/extractor` 动态列出各角色已加载插件；
+  默认值显示实际生效配置（`general.default_source`、`fetch.locators`、`fetch.out_dir`）
+  而非配置键名；`get_paper.identifier` 与 `fetch_fulltext.format` 描述同步 CLI 措辞。
 
 ### 新增
 

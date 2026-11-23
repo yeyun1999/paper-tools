@@ -87,6 +87,27 @@ def test_tool_input_schemas(server: Any) -> None:
     assert not tools["list_sources"].input_schema.get("properties")
 
 
+def test_param_descriptions_mirror_cli_help(server: Any) -> None:
+    """Plugin params must list available names and resolved config defaults, like --help."""
+
+    async def run() -> dict[str, Any]:
+        return {t.name: t for t in await server.list_tools()}
+
+    tools = asyncio.run(run())
+
+    def desc(tool: str, prop: str) -> str:
+        return tools[tool].input_schema["properties"][prop]["description"]
+
+    assert "default: fake" in desc("search_papers", "source")
+    assert "Available: fake" in desc("search_papers", "source")
+    assert "Available: fake, fake2" in desc("get_paper", "source")
+    assert "default: all" in desc("fetch_fulltext", "locator")
+    assert "Available: fake" in desc("fetch_fulltext", "locator")
+    assert "Available: fake_dl" in desc("fetch_fulltext", "downloader")
+    assert "Available: fake_ext" in desc("fetch_fulltext", "extractor")
+    assert "default: ./papers" in desc("fetch_fulltext", "out_dir")
+
+
 def test_search_papers_success(server: Any) -> None:
     payload = _call(server, "search_papers", {"query": "CRISPR", "limit": 2})
     assert payload["schema_version"] == render.SCHEMA_VERSION
