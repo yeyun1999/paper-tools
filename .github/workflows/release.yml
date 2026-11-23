@@ -101,12 +101,12 @@ jobs:
         run: |
           set -euo pipefail
           uv run --with twine twine check dist/*
-          uv run --no-project DIST_VERSION="$VERSION" python - <<'PY'
+          uv run --no-project python - <<'PY'
           import os
           from pathlib import Path
           from zipfile import ZipFile
 
-          expected_version = os.environ["DIST_VERSION"]
+          expected_version = os.environ["VERSION"]
           wheel = next(Path("dist").glob("*.whl"))
           with ZipFile(wheel) as archive:
               metadata = next(
@@ -160,6 +160,7 @@ jobs:
         with:
           packages-directory: dist
           print-response: false
+          skip-existing: true
 
   verify:
     name: Smoke test the published package
