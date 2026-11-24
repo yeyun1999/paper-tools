@@ -2,7 +2,7 @@
 
 > 配套架构设计见 [architecture.md](architecture.md)（v2，五类插件角色）。估算以人周计，总计约 6–7.5 人周；M2/M3 与 M4 部分任务可并行压缩。
 >
-> 状态：执行中。**M0–M5 已完成**（MCP stdio 全流程已验证；schema 快照门禁进 CI），**M6 非发布部分完成**：插件指南 / 模板 / bioRxiv 生态验证 / README 已完成，三包 uv build 通过；feat/multi-source-search 分支增量：多源聚合搜索（去重+聚合游标）、get 批量 NDJSON、fulltext_links（**schema 1.1**，快照门禁同步）。203 个主包离线测试 + 模板/bioRxiv 各 6 个全绿 + live 冒烟（S2 无 key 共享限额时按设计跳过）；ruff/mypy strict 全绿。分发名已定为 `paper-tools-cli`（`paper-search` 已占用；`paper-tools` 与 `papertools` 规范化同名被 PyPI 拒），模块/命令仍为 `paper_tools` / `paper-tools`。
+> 状态：执行中。**M0–M5 已完成**（MCP stdio 全流程已验证；schema 快照门禁进 CI），**M6 非发布部分完成**：插件指南 / 模板 / bioRxiv 生态验证 / README 已完成，三包 uv build 通过；feat/multi-source-search 分支增量：多源聚合搜索（去重+聚合游标）、get 批量 NDJSON、fulltext_links（**schema 1.1**，快照门禁同步）。后续调整：`fetch` 已改为单篇输入，NDJSON 仅保留给 `get`。203 个主包离线测试 + 模板/bioRxiv 各 6 个全绿 + live 冒烟（S2 无 key 共享限额时按设计跳过）；ruff/mypy strict 全绿。分发名已定为 `paper-tools-cli`（`paper-search` 已占用；`paper-tools` 与 `papertools` 规范化同名被 PyPI 拒），模块/命令仍为 `paper_tools` / `paper-tools`。
 
 ## 里程碑总览
 
@@ -48,7 +48,7 @@
 - [x] tests：五角色 fake 插件注册进测试专用 entry points，端到端覆盖 search/get/fetch（含 --format text）与全部退出码
 - [x] contract 测试套件骨架（按角色参数化）；enrich 合并策略单元测试
 
-**验收**：fake 插件下 `search --json` / `get --json` / `fetch --format text --json` 输出符合契约；enrich 不覆盖已有字段、冲突进 warnings；`schema` 输出合法 JSON Schema；故意构造的失败路径退出码正确；契约套件可复用于后续真实插件。
+**验收**：fake 插件下 `search --json` / `get --json` / `fetch --output title.txt --json` 输出符合契约；enrich 不覆盖已有字段、冲突进 warnings；`schema` 输出合法 JSON Schema；故意构造的失败路径退出码正确；契约套件可复用于后续真实插件。
 
 ## M2 检索 MVP：PubMed + Europe PMC（1 周）
 
@@ -73,7 +73,7 @@
 - [x] `plugins/europepmc.py` 增加 Locator + Downloader：fullTextXML（PDF 直链由 pmc_oa/unpaywall 覆盖）
 - [x] `plugins/jats.py`：Extractor（XML→纯文本，内置）；`plugins/pypdf_extractor.py`：Extractor（PDF→纯文本，extra `text`）
 - [x] FetchService 编排落地：去重（URL+格式）、排序（格式>可信度>license）、supports() 路由、降级、landing 兜底、提取阶段
-- [x] CLI `fetch`：--format/--out/--locator/--downloader/--extractor、文件命名 `{doi_slug}.{ext}`、批量 NDJSON
+- [x] CLI `fetch`：--format/--output/--locator/--downloader/--extractor、输出文件名默认 `./title.pdf`、按扩展名推断格式（初版支持批量 NDJSON，现改为单篇输入）
 - [x] 文件缓存与提取文本缓存命中路径；respx 回放 + live 冒烟
 
 **验收**：已知 OA DOI 拿到 PDF 且魔数校验通过；PMC 文献拿到 XML；`--format text` 走"下载→提取"流水线且 FullText 记录 extractor/extracted_from；闭源 DOI 返回 `FULLTEXT_UNAVAILABLE` + 出版商链接 + 退出码 4；重复 fetch 命中缓存（含 text 不重复下载）；Unpaywall 缺 email 时退出码 5。
@@ -87,7 +87,7 @@
 - [x] `plugins/semantic_scholar.py`：Searcher + MetadataProvider（Graph API），api_key 支持，1 req/s 限流与缓存强化
 - [x] 跨库标识符归一与去重（DOI 主键）；补全链优先级与冲突告警在五源下验证
 - [x] 三源查询翻译表 + 五角色契约测试全绿
-- [x] `--fields` 裁剪完善；批量 fetch NDJSON 稳定性（M1 已就位，M4 复验）
+- [x] `--fields` 裁剪完善；`fetch` 单篇 JSON 输出稳定性复验
 
 **验收**：同一 DOI 在五源 `get` 的 identifiers 归一一致；五源契约测试全部通过；S2 无 key 限流下批量查询不触发封禁（退避生效）；跨源补全冲突只告警不覆盖。
 
@@ -98,7 +98,7 @@
 - [x] extra `mcp`：官方 SDK（mcp>=2.0，MCPServer），`paper-tools mcp`（stdio）；缺 extra 报 USAGE 并给安装指引
 - [x] 四个工具：search_papers / get_paper / fetch_fulltext / list_sources，入参 schema 与 CLI 同源，返回同一 envelope
 - [x] `schema_version 1.0` 冻结；schema 快照测试进 CI 强制门禁（tests/snapshots/schema_v1.json + CHANGELOG）
-- [x] `examples/agent-usage.md`：shell 调用范式、退出码处理、NDJSON 批量、错误恢复建议（示例逐条实测可执行）
+- [x] `examples/agent-usage.md`：shell 调用范式、退出码处理、get NDJSON 批量、错误恢复建议（示例逐条实测可执行）
 - [x] MCP 客户端挂载验证：官方 SDK ClientSession 真实 stdio 子进程往返 + live search→get→fetch 全流程；Qoder/Claude 挂载配置见 agent-usage
 
 **验收**：MCP 客户端挂载后完成端到端文献获取；schema 快照测试拦截字段变更；agent-usage 示例逐条可执行。

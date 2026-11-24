@@ -55,7 +55,7 @@ Paper 的 `fulltext_links` 字段（schema 1.1）在搜索/补全期就捕获源
 
 ```bash
 # OA 全文：pdf / xml / text（text 走 下载→提取 流水线，优先 XML）
-uv run paper-tools fetch pmcid:PMC13434336 --format text --out papers/ --json
+uv run paper-tools fetch pmcid:PMC13434336 --output papers/paper.txt --json
 uv run paper-tools fetch doi:10.1093/nar/gkag769 --format pdf --json
 
 # 分页：取 next_cursor 原样回传续传（多源时 next_cursor 是免转义的 'ms1.' 聚合游标；
@@ -91,20 +91,19 @@ uv run paper-tools schema fetch          # FullText 的 JSON Schema
 | 4 | FULLTEXT_UNAVAILABLE | 无 OA 全文 | 把 details.publisher_url 给用户，走机构权限；**不要尝试绕过付费墙** |
 | 5 | CONFIG | 配置缺失 | 按 error.message 提示执行 `config set`（如 unpaywall email） |
 
-进程级错误（2/3/5）的 error envelope 在 **stderr**；`fetch` 的逐 ID 错误（3/4）作为结果行写在 **stdout**（见下节）。
+进程级错误的 error envelope 在 **stderr**；`fetch` / `get` 的逐文献错误作为结果信封写在 **stdout**（单篇为单个 JSON 对象，批量 `get` 为 NDJSON 中的一行）。
 
 ```bash
 uv run paper-tools fetch doi:10.1001/jama.2020.2648 --format pdf --json
 # 退出码 4；stdout: {"error": {"code": "FULLTEXT_UNAVAILABLE", "details": {"publisher_url": "…"}}}
 ```
 
-## 3. NDJSON 批量
+## 3. NDJSON 批量元数据
 
-多 ID `fetch` / `get` 的 `--json` 输出 NDJSON：每行一个独立 envelope（成功或错误），单 ID 失败不中断批次；进程退出码取第一个失败行的错误码。单 ID 时输出单个 JSON 对象（向后兼容）。
+多 ID `get` 的 `--json` 输出 NDJSON：每行一个独立 envelope（成功或错误），单 ID 失败不中断批次；进程退出码取第一个失败行的错误码。单 ID 时输出单个 JSON 对象。
 
 ```bash
-uv run paper-tools fetch pmcid:PMC13434336 doi:10.1038/s41586-020-2649-2 doi:10.1001/jama.2020.2648 \
-  --format text --out papers/ --json > batch.ndjson
+uv run paper-tools get pmid:38308006 doi:10.1000/missing --json > metadata.ndjson
 ```
 
 逐行处理范式（Python）：
@@ -112,18 +111,20 @@ uv run paper-tools fetch pmcid:PMC13434336 doi:10.1038/s41586-020-2649-2 doi:10.
 ```python
 import json
 
-with open("batch.ndjson", encoding="utf-8") as fh:
+with open("metadata.ndjson", encoding="utf-8") as fh:
     for line in fh:
         env = json.loads(line)
         if "error" in env:
             code = env["error"]["code"]
-            if code == "FULLTEXT_UNAVAILABLE":
-                print("闭源，出版商链接:", env["error"]["details"].get("publisher_url"))
+            if code == "NOT_FOUND":
+                print("未找到元数据")
             elif code == "UPSTREAM":
                 print("上游失败，可稍后重试:", env["error"]["message"])
         else:
-            print("OK:", env["data"]["path"])
+            print("OK:", env["data"].get("title") or env["data"].get("identifiers"))
 ```
+
+`fetch` 每次只接受一个 ID，`--json` 始终返回单个 JSON 对象；批量获取全文时应逐篇调用，不能将多个 `fetch` 输出直接当作 NDJSON 解析。
 
 批量建议：控制并发为 1（工具内部已按 host 限流）；重复 fetch 命中缓存（text 不会重复下载/提取）。
 
@@ -164,7 +165,7 @@ uv sync --extra mcp
 |---|---|---|
 | `search_papers` | query, source（逗号分隔多个或 `all`，多源去重）, limit, cursor, author, journal, year_from/year_to, oa_only, raw, enrich | SearchPage |
 | `get_paper` | identifier（doi:/pmid:/pmcid:/openalex:/s2:/arxiv: 或裸 DOI）, source | Paper |
-| `fetch_fulltext` | identifier, format(pdf\|xml\|text), out_dir, locator（逗号分隔多个）/downloader/extractor | FullText（含本地路径） |
+| `fetch_fulltext` | identifier, format(可选 pdf\|xml\|text), output(文件名), locator（逗号分隔多个）/downloader/extractor | FullText（含本地路径） |
 | `list_sources` | — | 五角色插件清单 |
 
 与 CLI 的唯一差异：MCP 工具把业务错误作为 **error envelope 返回值**（不抛异常、无退出码），agent 检查返回对象是否含 `error` 键即可，分支逻辑与第 2 节表格相同。

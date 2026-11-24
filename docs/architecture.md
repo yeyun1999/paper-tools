@@ -368,7 +368,7 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 2. **去重排序**：按 URL+格式 去重（同一 tar.gz 可同时产出 XML 与 PDF 候选）；排序键 = 格式匹配度 > 来源可信度（europepmc/pmc_oa 直链 > unpaywall 出版商直链 > 其他）> license 明确度。
 3. **下载与校验**：候选路由给 `supports()` 且 `formats` 匹配的 Downloader；PDF 校验 `%PDF` 魔数与最小体积，XML 校验可解析且含 `<article>`；失败自动降级下一候选。
 4. **提取（仅 --format text）**：产物按格式选 Extractor（XML→jats 优先；PDF→pypdf，可用 `--extractor` 强制指定）；输出 `.txt` 并记录 `extractor`/`extracted_from`。
-5. **落盘与缓存**：输出文件名 `{doi_slug}.{ext}`（DOI 中 `/` 等替换为 `_`）；同时写入文件缓存 `cache/papers/<sha256>.<ext>` + 映射 sidecar（sha256/ext/最终格式/extractor/extracted_from）。缓存存的是**最终产物**（text 请求存已提取文本），命中时跳过重复校验与重复提取，并恢复提取溯源；重复请求不重复下载。
+5. **落盘与缓存**：输出文件名由 `--output` / `fetch.output` 指定，默认 `./title.pdf`；未指定格式时按 `.pdf` / `.xml` / `.txt` 推断，无扩展名时补全（默认 PDF），格式与扩展名冲突返回 `USAGE`。同时写入文件缓存 `cache/papers/<sha256>.<ext>` + 映射 sidecar（sha256/ext/最终格式/extractor/extracted_from）。缓存存的是**最终产物**（text 请求存已提取文本），命中时跳过重复校验与重复提取，并恢复提取溯源；重复请求不重复下载。
 6. **失败路径**：所有候选失败或 `oa_status=closed` → 结构化错误 `FULLTEXT_UNAVAILABLE`，附 `publisher_url`，退出码 4。
 
 ## 9. CLI 契约
@@ -379,7 +379,7 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 |---|---|---|
 | `search QUERY` | 检索（返回浅记录） | `--source`（可重复/逗号分隔/`all`，多源并发+去重；默认 `general.default_source`）、`--limit`、`--cursor`（多源为 `ms1.` 聚合游标，兼容 JSON）、`--author`、`--journal`、`--year-from/--year-to`、`--oa-only`、`--raw`、`--fields`、`--enrich`（走补全链） |
 | `get ID...` | 按标识符取完整元数据（stub → 补全链），支持多个 ID 批量 | `--source`（可选，限定补全来源）、`--fields`；批量 `--json` 为 NDJSON，逐 ID 错误进 stdout 结果流，退出码取首个失败 |
-| `fetch ID...` | 获取全文，支持多个 ID | `--format pdf\|xml\|text`、`--out DIR`、`--locator`（可重复指定或逗号分隔，限定定位器；`all` 强制全部；默认取 `fetch.locators` 配置，空则全部）、`--downloader`（强制指定）、`--extractor`（text 时强制指定） |
+| `fetch ID` | 获取单篇文献全文 | `--format pdf\|xml\|text`（可选，省略时按输出扩展名推断）、`--output FILE`（默认 `./title.pdf`）、`--locator`（可重复指定或逗号分隔，限定定位器；`all` 强制全部；默认取 `fetch.locators` 配置，空则全部）、`--downloader`（强制指定）、`--extractor`（text 时强制指定） |
 | `sources` | 列出全部已注册插件（按五类角色分组）与关键属性 | |
 | `config get\|set\|list\|path` | 配置管理 | 点分键，如 `plugins.unpaywall.email` |
 | `cache clear\|stats` | 缓存管理 | |
@@ -390,7 +390,7 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 
 ### 9.2 JSON 输出契约（AI 助理主通道）
 
-- `--json` 时 stdout 只输出一个 JSON 对象，日志/进度全部走 stderr：
+- 单 ID 命令（包括 `fetch` / `get`）的 `--json` 输出为 stdout 上的单个 JSON 对象，日志/进度全部走 stderr：
 
 ```json
 {
@@ -401,21 +401,22 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 }
 ```
 
-- 错误同样结构化，输出到 stderr，配合退出码：
+- 进程级错误同样结构化，输出到 stderr，配合退出码：
 
 ```json
 {
   "schema_version": "1.1",
   "error": {
-    "code": "FULLTEXT_UNAVAILABLE",
-    "message": "No open-access full text found.",
-    "details": { "oa_status": "closed", "publisher_url": "https://doi.org/10.1038/..." }
+    "code": "USAGE",
+    "message": "Invalid --format; expected pdf, xml, or text.",
+    "details": {}
   }
 }
 ```
 
-- 批量 `fetch` 的 `--json` 输出为 NDJSON（每 ID 一行结果或错误），便于流式处理。
-- `fetch` / `get` 的逐 ID 错误（如全文不可得、元数据未找到）作为结果信封写入 **stdout** 结果流（单个 ID 时为单对象），与 NDJSON 批量保持一致；进程级错误（用法/配置）才走 stderr。退出码取第一个失败的逐 ID 错误码。
+- 多 ID `get` 的 `--json` 输出为 NDJSON（每 ID 一行结果或错误），便于流式处理；单 ID 失败不中断批次，退出码取第一个失败。
+- `fetch` 仅接受一个 ID，`--json` 始终输出单个 JSON 对象，不产生 NDJSON；传入多个 ID 返回用法错误（退出码 2）。
+- `fetch` / `get` 的逐文献错误（如全文不可得、元数据未找到）作为结果信封写入 **stdout** 结果流；进程级错误（用法/配置）才走 stderr。批量仅适用于 `get`。
 - `--fields` 裁剪 Paper 字段（如 `--fields title,doi,year`），降低 AI 上下文占用。
 - 补全冲突、提取质量提示等以 `warnings` 数组随成功结果返回，不污染 data。
 
@@ -435,12 +436,12 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 # 研究者
 paper-tools search "CRISPR base editing" --year-from 2020 --limit 20
 paper-tools search "CRISPR base editing" --enrich          # 补全摘要/OA 状态
-paper-tools fetch doi:10.1038/s41586-020-2649-2 --format pdf --out papers/
+paper-tools fetch doi:10.1038/s41586-020-2649-2 --output papers/paper.pdf
 
 # AI 助理
 paper-tools search "CRISPR base editing" --source pubmed --limit 10 --json
 paper-tools get pmid:12345678 --fields title,doi,abstract --json
-paper-tools fetch doi:10.1038/s41586-020-2649-2 --format text --json
+paper-tools fetch doi:10.1038/s41586-020-2649-2 --output papers/paper.txt --json
 ```
 
 ## 10. MCP 服务器（M5，已实现）
@@ -486,7 +487,7 @@ api_key = "..."                 # 可选，Authorization: Bearer；配后限流 
 
 [fetch]
 format_priority = ["pdf", "xml", "text"]
-out_dir = "./papers"
+output = "./title.pdf"         # 输出文件名；.pdf/.xml/.txt 可在未指定 --format 时推断格式
 locators = []                   # 默认 Locator 列表；空 = 全部；--locator 可覆盖，'all' 强制全部
 
 [metadata]

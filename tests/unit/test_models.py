@@ -11,7 +11,6 @@ from paper_tools.core.models import (
     Paper,
     merge_papers,
     normalize_doi,
-    paper_slug,
     parse_identifier,
 )
 
@@ -102,9 +101,3 @@ def test_merge_unions_sources() -> None:
     incoming = Paper(abstract="A", sources=["meta1"])
     merged, _ = merge_papers(base, incoming, source="meta2")
     assert merged.sources == ["search", "meta1", "meta2"]
-
-
-def test_paper_slug() -> None:
-    paper = Paper(identifiers={"doi": "10.1038/s41586-020-2649-2"})
-    assert paper_slug(paper) == "10.1038_s41586-020-2649-2"
-    assert paper_slug(Paper(title="A/B: C")) == "A_B_C"

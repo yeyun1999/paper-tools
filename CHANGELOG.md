@@ -6,6 +6,17 @@ JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.1**）：任何�
 
 ## [未发布]
 
+### 变更（破坏性：CLI）
+
+- **`fetch` 改为单篇输入**：`fetch ID` 每次只获取一篇文献，传入多个 ID 返回用法错误
+  （退出码 2）；`--json` 始终输出单个 JSON 对象，不再产生 NDJSON。单篇业务错误仍写入
+  stdout 结果流；MCP `fetch_fulltext` 本就单篇，不受影响；`get` 的批量 NDJSON 保持不变。
+
+- **`fetch` 输出参数改为文件名**：CLI `--out DIR` 改为 `--output FILE`，MCP `out_dir`
+  改为 `output`，配置 `fetch.out_dir` 改为 `fetch.output`；默认输出为当前目录的
+  `./title.pdf`。未指定格式时按 `.pdf` / `.xml` / `.txt` 推断，无扩展名时按格式补全
+  （未指定格式则 PDF）；格式与扩展名冲突或不支持扩展名返回 `USAGE`。
+
 ### 变更（破坏性：schema_version 1.0 → 1.1）
 
 - **Paper 新增 `fulltext_links` 字段**（`list[FullTextCandidate]`）：OpenAlex /
@@ -46,7 +57,7 @@ JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.1**）：任何�
   `fetch --locator/--downloader/--extractor` 帮助同样列出各角色可用插件；补齐全部选项描述。
 - **MCP 工具参数说明与 CLI 帮助对齐**：`search_papers.source`、`get_paper.source`、
   `fetch_fulltext.locator/downloader/extractor` 动态列出各角色已加载插件；
-  默认值显示实际生效配置（`general.default_source`、`fetch.locators`、`fetch.out_dir`）
+  默认值显示实际生效配置（`general.default_source`、`fetch.locators`、`fetch.output`）
   而非配置键名；`get_paper.identifier` 与 `fetch_fulltext.format` 描述同步 CLI 措辞。
 
 ### 新增
@@ -85,8 +96,8 @@ JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.1**）：任何�
 - **M4 搜索源扩展**：Crossref、OpenAlex（含 Locator）、Semantic Scholar 插件；
   五源查询翻译表；跨库标识符归一（DOI 主键、`normalize_pmcid`、OpenAlex 短 ID、S2 externalIds）。
 - **M3 全文流水线**：Unpaywall / PMC OA / Europe PMC 定位与下载，`http_direct` 通用下载器，
-  JATS 与 pypdf 提取器（extra `text`）；`fetch --format pdf|xml|text`，批量 NDJSON；
-  文件缓存存最终产物（text 命中不重复下载/提取，保留 extractor 溯源）。
+  JATS 与 pypdf 提取器（extra `text`）；`fetch --format pdf|xml|text`（初版批量 NDJSON，
+  现已改为未发布版本中的单篇输入）；文件缓存存最终产物（text 命中不重复下载/提取，保留 extractor 溯源）。
 - **M2 检索 MVP**：PubMed、Europe PMC 插件，`search` / `get` / `--enrich` 补全链。
 - **M0–M1 框架**：五角色插件机制（Searcher / MetadataProvider / Locator / Downloader / Extractor），
   entry-point 发现，统一 Query / 错误码 / 退出码（0/2/3/4/5），TOML+env+CLI 配置，

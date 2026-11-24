@@ -33,7 +33,6 @@ from paper_tools.core.models import (
     SearchPage,
     is_complete,
     merge_papers,
-    paper_slug,
     parse_identifier,
 )
 from paper_tools.core.plugins import (
@@ -52,6 +51,12 @@ _METADATA_TTL = 7 * 86400
 _FILEMAP_TTL = 30 * 86400
 _TRUSTED_LOCATORS = {"europepmc", "pmc_oa"}
 _PREFERRED_EXTRACTORS = {"xml": "jats", "pdf": "pypdf"}
+_OUTPUT_EXTENSIONS: dict[str, ArtifactFormat] = {
+    ".pdf": "pdf",
+    ".xml": "xml",
+    ".txt": "text",
+}
+_FORMAT_EXTENSIONS: dict[ArtifactFormat, str] = {"pdf": ".pdf", "xml": ".xml", "text": ".txt"}
 
 _MULTI_CURSOR_PREFIX = "ms1."
 # Percent-style escaping is applied to the cursor values only; the order
@@ -314,22 +319,23 @@ class FetchService:
         self,
         identifier: str,
         *,
-        fmt: ArtifactFormat = "pdf",
-        out_dir: Path | None = None,
+        fmt: ArtifactFormat | None = None,
+        output: Path | None = None,
         locators: list[str] | None = None,
         downloader: str | None = None,
         extractor: str | None = None,
     ) -> tuple[FullText, list[str]]:
         ident = parse_identifier(identifier)
+        output_path, artifact_format = self._resolve_output(fmt, output)
         stub = Paper(identifiers={ident.kind: ident.value})
         paper, warnings = self._metadata.enrich(stub)
 
         candidates = self._collect_candidates(paper, locators, warnings)
         attempts: list[str] = []
-        for candidate in self._rank(candidates, fmt):
-            if not self._format_compatible(candidate, fmt):
+        for candidate in self._rank(candidates, artifact_format):
+            if not self._format_compatible(candidate, artifact_format):
                 continue
-            artifact = self._cached_artifact(candidate, fmt)
+            artifact = self._cached_artifact(candidate, artifact_format)
             if artifact is None:
                 artifact = self._download(candidate, downloader, attempts)
             if artifact is None:
@@ -339,7 +345,7 @@ class FetchService:
                     # cached artifacts are final products, validated before storing
                     self._validate(artifact)
                 result = self._finalize(
-                    paper, artifact, candidate, fmt, out_dir, extractor, warnings
+                    paper, artifact, candidate, artifact_format, output_path, extractor, warnings
                 )
             except UpstreamError as exc:
                 # validation/extraction failure: fall through to the next candidate.
@@ -355,6 +361,28 @@ class FetchService:
             publisher_url=paper.publisher_url or landing_url,
             attempts=attempts,
         )
+
+    def _resolve_output(
+        self, fmt: ArtifactFormat | None, output: Path | None
+    ) -> tuple[Path, ArtifactFormat]:
+        output_path = output or Path(self._config.fetch.output)
+        if output_path.exists() and output_path.is_dir():
+            raise UsageError(f"Output path is a directory: {output_path}")
+        suffix = output_path.suffix.lower()
+        inferred_format = _OUTPUT_EXTENSIONS.get(suffix)
+        if suffix and inferred_format is None:
+            raise UsageError(
+                f"Unsupported output extension {suffix!r}; expected .pdf, .xml, or .txt."
+            )
+        artifact_format = fmt or inferred_format or "pdf"
+        if inferred_format is not None and inferred_format != artifact_format:
+            raise UsageError(
+                f"Output extension {suffix!r} implies format {inferred_format!r}, "
+                f"but --format is {artifact_format!r}."
+            )
+        if not suffix:
+            output_path = output_path.with_suffix(_FORMAT_EXTENSIONS[artifact_format])
+        return output_path, artifact_format
 
     def _collect_candidates(
         self, paper: Paper, locators: list[str] | None, warnings: list[str]
@@ -504,7 +532,7 @@ class FetchService:
         artifact: Artifact,
         candidate: FullTextCandidate,
         fmt: ArtifactFormat,
-        out_dir: Path | None,
+        output_path: Path,
         extractor_name: str | None,
         warnings: list[str],
     ) -> FullText:
@@ -543,14 +571,12 @@ class FetchService:
             },
             ttl=_FILEMAP_TTL,
         )
-        target_dir = out_dir or Path(self._config.fetch.out_dir)
-        target_dir.mkdir(parents=True, exist_ok=True)
-        out_path = target_dir / f"{paper_slug(paper)}.{ext}"
-        out_path.write_bytes(data)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(data)
         return FullText(
             paper=paper,
             format=fmt,
-            path=out_path,
+            path=output_path,
             sha256=digest,
             source_url=candidate.url,
             downloader=artifact.downloader,

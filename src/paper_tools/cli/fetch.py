@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Any, cast
+from typing import Annotated, cast
 
 import typer
 
@@ -19,6 +19,14 @@ try:
 except ConfigError:
     _FETCH_CONFIG = FetchConfig()
 _DEFAULT_LOCATORS = ", ".join(_FETCH_CONFIG.locators) if _FETCH_CONFIG.locators else "all"
+_FORMAT_HELP = (
+    "Output format: pdf | xml | text (download + extract). If omitted, infer from the "
+    "--output extension; default to pdf when no extension is present."
+)
+_OUTPUT_HELP = (
+    f"Output filename (default: {_FETCH_CONFIG.output}). Extensions .pdf/.xml/.txt infer "
+    "--format when omitted; a missing extension is appended."
+)
 _LOCATOR_HELP = (
     "Locator plugins to restrict to; repeat the flag or comma-separate. "
     f"'all' forces every registered locator (default: {_DEFAULT_LOCATORS}). "
@@ -37,19 +45,17 @@ def register(app: typer.Typer) -> None:
     @app.command()
     def fetch(
         ctx: typer.Context,
-        identifiers: Annotated[
-            list[str],
-            typer.Argument(
-                help="One or more IDs (doi:/pmid:/pmcid: or bare DOI), processed independently."
-            ),
+        identifier: Annotated[
+            str,
+            typer.Argument(help="One ID (doi:/pmid:/pmcid: or bare DOI)."),
         ],
         fmt: Annotated[
-            str,
-            typer.Option("--format", help="Output format: pdf | xml | text (download + extract)."),
-        ] = "pdf",
-        out: Annotated[
+            str | None,
+            typer.Option("--format", help=_FORMAT_HELP),
+        ] = None,
+        output: Annotated[
             Path | None,
-            typer.Option("--out", help=f"Output directory (default: {_FETCH_CONFIG.out_dir})."),
+            typer.Option("--output", help=_OUTPUT_HELP),
         ] = None,
         locator: Annotated[
             list[str] | None,
@@ -64,12 +70,12 @@ def register(app: typer.Typer) -> None:
             typer.Option("--extractor", help=_EXTRACTOR_HELP),
         ] = None,
     ) -> None:
-        """Retrieve open-access full text. Batch output is NDJSON with --json."""
+        """Retrieve open-access full text for one paper."""
         opts = ctx.obj
         with render.error_guard(opts, "fetch"):
-            if fmt not in ("pdf", "xml", "text"):
+            if fmt is not None and fmt not in ("pdf", "xml", "text"):
                 raise UsageError(f"Invalid --format {fmt!r}; expected pdf, xml, or text.")
-            artifact_format = cast(ArtifactFormat, fmt)
+            artifact_format = cast(ArtifactFormat, fmt) if fmt is not None else None
             locator_names = (
                 [name.strip() for item in locator for name in item.split(",") if name.strip()]
                 if locator
@@ -78,38 +84,28 @@ def register(app: typer.Typer) -> None:
             if locator_names is not None and "all" in locator_names:
                 locator_names = []  # explicit all overrides the fetch.locators config
             services = context.build_services(opts)
-            payloads: list[dict[str, Any]] = []
-            exit_code = 0
-            for identifier in identifiers:
-                try:
-                    result, warnings = services.fetch.fetch(
-                        identifier,
-                        fmt=artifact_format,
-                        out_dir=out,
-                        locators=locator_names,
-                        downloader=downloader,
-                        extractor=extractor,
+            try:
+                result, warnings = services.fetch.fetch(
+                    identifier,
+                    fmt=artifact_format,
+                    output=output,
+                    locators=locator_names,
+                    downloader=downloader,
+                    extractor=extractor,
+                )
+            except PaperToolsError as exc:
+                if opts.json_output:
+                    render.emit_json(render.error_envelope(exc))
+                else:
+                    render.err_console.print(
+                        f"[red]FAIL[/red] {identifier}: {exc.code}: {exc.message}"
                     )
-                except PaperToolsError as exc:
-                    payloads.append(render.error_envelope(exc))
-                    if exit_code == 0:
-                        exit_code = exc.exit_code
-                    if not opts.json_output:
-                        render.err_console.print(
-                            f"[red]FAIL[/red] {identifier}: {exc.code}: {exc.message}"
-                        )
-                    continue
-                warnings = services.registry.load_warnings + warnings
-                payloads.append(
+                raise typer.Exit(exc.exit_code) from exc
+            warnings = services.registry.load_warnings + warnings
+            if opts.json_output:
+                render.emit_json(
                     render.success_envelope("fetch", result.model_dump(mode="json"), warnings)
                 )
-                if not opts.json_output:
-                    render.render_fulltext(result)
-                    render.show_warnings(warnings, opts)
-            if opts.json_output:
-                if len(payloads) == 1:
-                    render.emit_json(payloads[0])
-                else:
-                    render.emit_ndjson(payloads)
-            if exit_code:
-                raise typer.Exit(exit_code)
+            else:
+                render.render_fulltext(result)
+                render.show_warnings(warnings, opts)

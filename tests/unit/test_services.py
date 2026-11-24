@@ -13,7 +13,7 @@ from paper_tools.core.errors import (
     UpstreamError,
     UsageError,
 )
-from paper_tools.core.models import FullTextCandidate, Paper, SearchPage
+from paper_tools.core.models import ArtifactFormat, FullTextCandidate, Paper, SearchPage
 from paper_tools.core.plugins import PluginMeta
 from paper_tools.core.query import Query
 from paper_tools.core.services import Services
@@ -75,37 +75,92 @@ def test_enrich_cache(services: Services) -> None:
 
 
 def test_fetch_pdf(services: Services, tmp_path: Path) -> None:
-    result, _ = services.fetch.fetch("doi:10.1000/fake1", out_dir=tmp_path / "out")
+    output = tmp_path / "custom.pdf"
+    result, _ = services.fetch.fetch("doi:10.1000/fake1", output=output)
     assert result.format == "pdf"
-    assert result.path.exists()
+    assert result.path == output
     assert result.path.read_bytes().startswith(b"%PDF")
     assert result.downloader == "fake_dl"
-    assert result.path.name == "10.1000_fake1.pdf"
 
 
 def test_fetch_xml(services: Services, tmp_path: Path) -> None:
-    result, _ = services.fetch.fetch("doi:10.1000/fake1", fmt="xml", out_dir=tmp_path)
+    output = tmp_path / "paper.xml"
+    result, _ = services.fetch.fetch("doi:10.1000/fake1", fmt="xml", output=output)
     assert result.format == "xml"
+    assert result.path == output
     assert b"<article>" in result.path.read_bytes()
 
 
 def test_fetch_text_prefers_xml(services: Services, tmp_path: Path) -> None:
-    result, _ = services.fetch.fetch("doi:10.1000/fake1", fmt="text", out_dir=tmp_path)
+    output = tmp_path / "paper.txt"
+    result, _ = services.fetch.fetch("doi:10.1000/fake1", fmt="text", output=output)
     assert result.format == "text"
     assert result.extractor == "fake_ext"
     assert result.extracted_from == "xml"
+    assert result.path == output
     assert result.path.read_text(encoding="utf-8").startswith("EXTRACTED[xml]")
 
 
+def test_fetch_default_output(
+    services: Services, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    result, _ = services.fetch.fetch("doi:10.1000/fake1")
+    assert result.path == Path("title.pdf")
+    assert result.path.read_bytes().startswith(b"%PDF")
+
+
+@pytest.mark.parametrize(
+    ("filename", "expected_format"),
+    [("paper.pdf", "pdf"), ("paper.xml", "xml"), ("paper.txt", "text")],
+)
+def test_fetch_infers_format_from_output(
+    services: Services, tmp_path: Path, filename: str, expected_format: str
+) -> None:
+    output = tmp_path / filename
+    result, _ = services.fetch.fetch("doi:10.1000/fake1", output=output)
+    assert result.format == expected_format
+    assert result.path == output
+
+
+def test_fetch_appends_missing_extension(services: Services, tmp_path: Path) -> None:
+    result, _ = services.fetch.fetch("doi:10.1000/fake1", fmt="text", output=tmp_path / "paper")
+    assert result.path == tmp_path / "paper.txt"
+
+
+def test_fetch_defaults_to_pdf_without_extension(services: Services, tmp_path: Path) -> None:
+    result, _ = services.fetch.fetch("doi:10.1000/fake1", output=tmp_path / "paper")
+    assert result.format == "pdf"
+    assert result.path == tmp_path / "paper.pdf"
+
+
+@pytest.mark.parametrize(("fmt", "filename"), [("pdf", "paper.xml"), ("text", "paper.pdf")])
+def test_fetch_rejects_format_extension_mismatch(
+    services: Services, tmp_path: Path, fmt: ArtifactFormat, filename: str
+) -> None:
+    with pytest.raises(UsageError, match="implies format"):
+        services.fetch.fetch("doi:10.1000/fake1", fmt=fmt, output=tmp_path / filename)
+
+
+def test_fetch_rejects_unsupported_extension(services: Services, tmp_path: Path) -> None:
+    with pytest.raises(UsageError, match="Unsupported output extension"):
+        services.fetch.fetch("doi:10.1000/fake1", output=tmp_path / "paper.docx")
+
+
+def test_fetch_rejects_output_directory(services: Services, tmp_path: Path) -> None:
+    with pytest.raises(UsageError, match="Output path is a directory"):
+        services.fetch.fetch("doi:10.1000/fake1", output=tmp_path)
+
+
 def test_fetch_bad_pdf_falls_back(services: Services, tmp_path: Path) -> None:
-    result, warnings = services.fetch.fetch("doi:10.1000/badpdf", out_dir=tmp_path)
+    result, warnings = services.fetch.fetch("doi:10.1000/badpdf", output=tmp_path / "paper.pdf")
     assert result.source_url.endswith("good.pdf")
     assert any("not a valid PDF" in w for w in warnings)
 
 
 def test_fetch_closed_raises_unavailable(services: Services, tmp_path: Path) -> None:
     with pytest.raises(FullTextUnavailableError) as exc_info:
-        services.fetch.fetch("doi:10.1000/closed", out_dir=tmp_path)
+        services.fetch.fetch("doi:10.1000/closed", output=tmp_path / "paper.pdf")
     assert exc_info.value.exit_code == 4
     assert exc_info.value.details["publisher_url"] == "https://doi.org/10.1000/closed"
 
@@ -113,30 +168,36 @@ def test_fetch_closed_raises_unavailable(services: Services, tmp_path: Path) -> 
 def test_fetch_forced_downloader_mismatch(services: Services, tmp_path: Path) -> None:
     with pytest.raises(UsageError):
         services.fetch.fetch(
-            "doi:10.1000/fake1", fmt="xml", out_dir=tmp_path, downloader="nonexistent"
+            "doi:10.1000/fake1",
+            fmt="xml",
+            output=tmp_path / "paper.xml",
+            downloader="nonexistent",
         )
 
 
 def test_fetch_file_cache_hit(services: Services, tmp_path: Path) -> None:
-    services.fetch.fetch("doi:10.1000/fake1", out_dir=tmp_path)
+    services.fetch.fetch("doi:10.1000/fake1", output=tmp_path / "first.pdf")
     downloader = services.registry.get("downloader", "fake_dl")
     calls_before = downloader.calls
-    result, _ = services.fetch.fetch("doi:10.1000/fake1", out_dir=tmp_path)
+    output = tmp_path / "second.pdf"
+    result, _ = services.fetch.fetch("doi:10.1000/fake1", output=output)
     assert downloader.calls == calls_before
     assert result.downloader == "cache"
+    assert result.path == output
 
 
 def test_fetch_text_cache_hit_keeps_provenance(services: Services, tmp_path: Path) -> None:
     """Regression: cached text must not be re-validated/re-extracted as its source XML."""
-    first, _ = services.fetch.fetch("doi:10.1000/fake1", fmt="text", out_dir=tmp_path)
+    first, _ = services.fetch.fetch("doi:10.1000/fake1", fmt="text", output=tmp_path / "first.txt")
     downloader = services.registry.get("downloader", "fake_dl")
     calls_before = downloader.calls
-    second, _ = services.fetch.fetch("doi:10.1000/fake1", fmt="text", out_dir=tmp_path)
+    output = tmp_path / "second.txt"
+    second, _ = services.fetch.fetch("doi:10.1000/fake1", fmt="text", output=output)
     assert downloader.calls == calls_before  # no re-download
     assert second.downloader == "cache"
     assert second.extractor == "fake_ext"
     assert second.extracted_from == "xml"
-    assert second.path.name.endswith(".txt")
+    assert second.path == output
     assert second.path.read_text(encoding="utf-8") == first.path.read_text(encoding="utf-8")
 
 
@@ -148,7 +209,7 @@ def test_fetch_locator_config_error_becomes_warning(services: Services, tmp_path
             raise ConfigError("missing email")
 
     services.registry.register("locator", BrokenConfigLocator())
-    result, warnings = services.fetch.fetch("doi:10.1000/fake1", out_dir=tmp_path)
+    result, warnings = services.fetch.fetch("doi:10.1000/fake1", output=tmp_path / "paper.pdf")
     assert result.source_url == "https://example.org/paper.pdf"
     assert any("broken_cfg: missing email" in w for w in warnings)
 
@@ -180,7 +241,7 @@ def test_fetch_dedup_keeps_formats_per_url(services: Services, tmp_path: Path) -
 
     services.registry.register("locator", SameUrlLocator())
     result, _ = services.fetch.fetch(
-        "doi:10.1000/fake1", fmt="xml", out_dir=tmp_path, locators=["sameurl"]
+        "doi:10.1000/fake1", fmt="xml", output=tmp_path / "paper.xml", locators=["sameurl"]
     )
     assert result.format == "xml"
     assert result.source_url == "https://example.org/package.tar.gz"
@@ -198,12 +259,15 @@ class _PdfOnlyLocator:
 def test_fetch_locators_list_restricts(services: Services, tmp_path: Path) -> None:
     services.registry.register("locator", _PdfOnlyLocator())
     result, _ = services.fetch.fetch(
-        "doi:10.1000/fake1", fmt="xml", out_dir=tmp_path, locators=["pdfonly", "fake"]
+        "doi:10.1000/fake1", fmt="xml", output=tmp_path / "paper.xml", locators=["pdfonly", "fake"]
     )
     assert result.source_url == "https://example.org/paper.xml"
     with pytest.raises(FullTextUnavailableError):
         services.fetch.fetch(
-            "doi:10.1000/fake1", fmt="xml", out_dir=tmp_path / "x", locators=["pdfonly"]
+            "doi:10.1000/fake1",
+            fmt="xml",
+            output=tmp_path / "missing" / "paper.xml",
+            locators=["pdfonly"],
         )
 
 
@@ -216,14 +280,14 @@ def test_fetch_locators_default_from_config(services: Services, tmp_path: Path) 
 
     services.registry.register("locator", BoomLocator())
     services.config.fetch.locators = ["fake"]
-    result, warnings = services.fetch.fetch("doi:10.1000/fake1", out_dir=tmp_path)
+    result, warnings = services.fetch.fetch("doi:10.1000/fake1", output=tmp_path / "paper.pdf")
     assert result.source_url == "https://example.org/paper.pdf"
     assert not warnings
 
 
 def test_fetch_unknown_locator_usage_error(services: Services, tmp_path: Path) -> None:
     with pytest.raises(UsageError):
-        services.fetch.fetch("doi:10.1000/fake1", out_dir=tmp_path, locators=["nope"])
+        services.fetch.fetch("doi:10.1000/fake1", output=tmp_path / "paper.pdf", locators=["nope"])
 
 
 class StubSearcher:
@@ -390,6 +454,8 @@ def test_fetch_uses_paper_fulltext_links(services: Services, tmp_path: Path) -> 
     services.registry.register("metadata", LinkMetadata())
     services.registry.register("locator", EmptyLocator())
     # "missing" makes the fake providers pass through, so linkmeta supplies the links
-    result, _ = services.fetch.fetch("doi:10.1000/missing", out_dir=tmp_path, locators=["emptyloc"])
+    result, _ = services.fetch.fetch(
+        "doi:10.1000/missing", output=tmp_path / "paper.pdf", locators=["emptyloc"]
+    )
     assert result.source_url == "https://example.org/seed.pdf"
     assert result.path.read_bytes().startswith(b"%PDF")

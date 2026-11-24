@@ -81,9 +81,10 @@ def test_tool_input_schemas(server: Any) -> None:
     assert tools["get_paper"].input_schema["required"] == ["identifier"]
     fetch_schema = tools["fetch_fulltext"].input_schema
     assert fetch_schema["required"] == ["identifier"]
-    assert {"format", "out_dir", "locator", "downloader", "extractor"} <= set(
+    assert {"format", "output", "locator", "downloader", "extractor"} <= set(
         fetch_schema["properties"]
     )
+    assert "out_dir" not in fetch_schema["properties"]
     assert not tools["list_sources"].input_schema.get("properties")
 
 
@@ -105,7 +106,8 @@ def test_param_descriptions_mirror_cli_help(server: Any) -> None:
     assert "Available: fake" in desc("fetch_fulltext", "locator")
     assert "Available: fake_dl" in desc("fetch_fulltext", "downloader")
     assert "Available: fake_ext" in desc("fetch_fulltext", "extractor")
-    assert "default: ./papers" in desc("fetch_fulltext", "out_dir")
+    assert "default: ./title.pdf" in desc("fetch_fulltext", "output")
+    assert "infer" in desc("fetch_fulltext", "format")
 
 
 def test_search_papers_success(server: Any) -> None:
@@ -139,13 +141,14 @@ def test_get_paper_enriches(server: Any) -> None:
 
 
 def test_fetch_fulltext_pdf(server: Any, tmp_path: Path) -> None:
-    out = tmp_path / "out"
+    output = tmp_path / "custom.pdf"
     payload = _call(
         server,
         "fetch_fulltext",
-        {"identifier": "doi:10.1000/fake1", "format": "pdf", "out_dir": str(out)},
+        {"identifier": "doi:10.1000/fake1", "output": str(output)},
     )
     path = Path(payload["data"]["path"])
+    assert path == output
     assert path.read_bytes().startswith(b"%PDF")
     assert payload["data"]["format"] == "pdf"
 
@@ -156,8 +159,7 @@ def test_fetch_fulltext_text_provenance(server: Any, tmp_path: Path) -> None:
         "fetch_fulltext",
         {
             "identifier": "doi:10.1000/fake1",
-            "format": "text",
-            "out_dir": str(tmp_path / "out"),
+            "output": str(tmp_path / "paper.txt"),
         },
     )
     data = payload["data"]
@@ -173,7 +175,7 @@ def test_fetch_fulltext_locator_list(server: Any, tmp_path: Path) -> None:
         {
             "identifier": "doi:10.1000/fake1",
             "format": "pdf",
-            "out_dir": str(tmp_path / "out"),
+            "output": str(tmp_path / "paper.pdf"),
             "locator": "fake",
         },
     )
@@ -187,7 +189,7 @@ def test_fetch_fulltext_locator_all(server: Any, tmp_path: Path) -> None:
         {
             "identifier": "doi:10.1000/fake1",
             "format": "pdf",
-            "out_dir": str(tmp_path / "out"),
+            "output": str(tmp_path / "paper.pdf"),
             "locator": "all",
         },
     )
@@ -201,7 +203,7 @@ def test_fetch_fulltext_closed_returns_error_envelope(server: Any, tmp_path: Pat
         {
             "identifier": "doi:10.1000/closed",
             "format": "pdf",
-            "out_dir": str(tmp_path / "out"),
+            "output": str(tmp_path / "paper.pdf"),
         },
     )
     assert payload["error"]["code"] == "FULLTEXT_UNAVAILABLE"
@@ -209,6 +211,19 @@ def test_fetch_fulltext_closed_returns_error_envelope(server: Any, tmp_path: Pat
 
 def test_fetch_fulltext_invalid_format(server: Any) -> None:
     payload = _call(server, "fetch_fulltext", {"identifier": "doi:10.1000/fake1", "format": "docx"})
+    assert payload["error"]["code"] == "USAGE"
+
+
+def test_fetch_fulltext_format_output_mismatch(server: Any, tmp_path: Path) -> None:
+    payload = _call(
+        server,
+        "fetch_fulltext",
+        {
+            "identifier": "doi:10.1000/fake1",
+            "format": "text",
+            "output": str(tmp_path / "paper.pdf"),
+        },
+    )
     assert payload["error"]["code"] == "USAGE"
 
 

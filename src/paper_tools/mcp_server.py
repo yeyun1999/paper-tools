@@ -73,7 +73,7 @@ def build_server(opts: GlobalOpts | None = None) -> MCPServer[Any]:
 
     default_source = services.config.general.default_source
     default_locators = ", ".join(services.config.fetch.locators) or "all"
-    default_out_dir = services.config.fetch.out_dir
+    default_output = services.config.fetch.output
 
     @server.tool(
         description=(
@@ -189,11 +189,20 @@ def build_server(opts: GlobalOpts | None = None) -> MCPServer[Any]:
     def fetch_fulltext(
         identifier: Annotated[str, Field(description="doi:/pmid:/pmcid: ID or bare DOI.")],
         format: Annotated[
-            str, Field(description="Output format: pdf | xml | text (download + extract).")
-        ] = "pdf",
-        out_dir: str | None = Field(
+            str | None,
+            Field(
+                description=(
+                    "Output format: pdf | xml | text (download + extract). If omitted, infer "
+                    "from the output extension; default to pdf when no extension is present."
+                )
+            ),
+        ] = None,
+        output: str | None = Field(
             default=None,
-            description=f"Output directory (default: {default_out_dir}).",
+            description=(
+                f"Output filename (default: {default_output}). Extensions .pdf/.xml/.txt infer "
+                "format when omitted; a missing extension is appended."
+            ),
         ),
         locator: str | None = Field(
             default=None,
@@ -216,9 +225,9 @@ def build_server(opts: GlobalOpts | None = None) -> MCPServer[Any]:
         ),
     ) -> dict[str, Any]:
         try:
-            if format not in ("pdf", "xml", "text"):
+            if format is not None and format not in ("pdf", "xml", "text"):
                 raise UsageError(f"Invalid format {format!r}; expected pdf, xml, or text.")
-            artifact_format = cast(ArtifactFormat, format)
+            artifact_format = cast(ArtifactFormat, format) if format is not None else None
             locator_names = (
                 [name.strip() for name in locator.split(",") if name.strip()] if locator else None
             )
@@ -227,7 +236,7 @@ def build_server(opts: GlobalOpts | None = None) -> MCPServer[Any]:
             result, warnings = services.fetch.fetch(
                 identifier,
                 fmt=artifact_format,
-                out_dir=Path(out_dir) if out_dir else None,
+                output=Path(output) if output else None,
                 locators=locator_names,
                 downloader=downloader,
                 extractor=extractor,

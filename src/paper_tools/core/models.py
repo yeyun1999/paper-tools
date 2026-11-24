@@ -138,18 +138,6 @@ class FullText(BaseModel):
     extracted_from: Literal["pdf", "xml"] | None = None
 
 
-def paper_slug(paper: Paper) -> str:
-    """Filesystem-safe slug, preferring DOI."""
-    if "doi" in paper.identifiers:
-        base = paper.identifiers["doi"]
-    elif paper.identifiers:
-        kind, value = next(iter(paper.identifiers.items()))
-        base = f"{kind}_{value}"
-    else:
-        base = paper.title or "paper"
-    return re.sub(r"[^A-Za-z0-9._-]+", "_", base).strip("_") or "paper"
-
-
 def is_complete(paper: Paper) -> bool:
     """Early-stop condition for the enrichment chain."""
     return bool(paper.title) and paper.abstract is not None

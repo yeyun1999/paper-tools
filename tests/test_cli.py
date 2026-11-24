@@ -118,57 +118,112 @@ def test_get_single_stays_single_object(cli: CliRunner) -> None:
 
 
 def test_fetch_pdf_json(cli: CliRunner, tmp_path: Path) -> None:
+    output = tmp_path / "custom.pdf"
     result = cli.invoke(
         app,
-        ["fetch", "doi:10.1000/fake1", "--format", "pdf", "--out", str(tmp_path), "--json"],
+        ["fetch", "doi:10.1000/fake1", "--output", str(output), "--json"],
     )
     assert result.exit_code == 0
     data = json.loads(result.stdout)["data"]
     assert data["format"] == "pdf"
-    assert Path(data["path"]).exists()
+    assert Path(data["path"]) == output
+    assert output.exists()
     assert data["downloader"] == "fake_dl"
 
 
-def test_fetch_text_json(cli: CliRunner, tmp_path: Path) -> None:
-    result = cli.invoke(
-        app,
-        ["fetch", "doi:10.1000/fake1", "--format", "text", "--out", str(tmp_path), "--json"],
-    )
-    assert result.exit_code == 0
-    data = json.loads(result.stdout)["data"]
-    assert data["extractor"] == "fake_ext"
-    assert data["extracted_from"] == "xml"
-
-
-def test_fetch_unavailable_exit_4(cli: CliRunner, tmp_path: Path) -> None:
-    result = cli.invoke(
-        app,
-        ["fetch", "doi:10.1000/closed", "--out", str(tmp_path), "--json"],
-    )
-    assert result.exit_code == 4
-    # per-ID errors travel in the stdout result stream (consistent with NDJSON batches)
-    error = json.loads(result.stdout)["error"]
-    assert error["code"] == "FULLTEXT_UNAVAILABLE"
-    assert error["details"]["publisher_url"] == "https://doi.org/10.1000/closed"
-
-
-def test_fetch_batch_ndjson(cli: CliRunner, tmp_path: Path) -> None:
+def test_fetch_human_output(cli: CliRunner, tmp_path: Path) -> None:
     result = cli.invoke(
         app,
         [
             "fetch",
             "doi:10.1000/fake1",
+            "--format",
+            "pdf",
+            "--output",
+            str(tmp_path / "paper.pdf"),
+        ],
+    )
+    assert result.exit_code == 0
+    assert "OK pdf ->" in result.stdout
+    assert "fake_dl" in result.stdout
+
+
+def test_fetch_text_json_infers_format(cli: CliRunner, tmp_path: Path) -> None:
+    output = tmp_path / "paper.txt"
+    result = cli.invoke(
+        app,
+        ["fetch", "doi:10.1000/fake1", "--output", str(output), "--json"],
+    )
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)["data"]
+    assert data["format"] == "text"
+    assert Path(data["path"]) == output
+    assert data["extractor"] == "fake_ext"
+    assert data["extracted_from"] == "xml"
+
+
+def test_fetch_default_output(
+    cli: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    result = cli.invoke(app, ["fetch", "doi:10.1000/fake1", "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)["data"]
+    assert data["format"] == "pdf"
+    assert Path(data["path"]) == Path("title.pdf")
+    assert (tmp_path / "title.pdf").exists()
+
+
+def test_fetch_format_output_mismatch(cli: CliRunner, tmp_path: Path) -> None:
+    result = cli.invoke(
+        app,
+        [
+            "fetch",
+            "doi:10.1000/fake1",
+            "--format",
+            "text",
+            "--output",
+            str(tmp_path / "paper.pdf"),
+            "--json",
+        ],
+    )
+    assert result.exit_code == 2
+    assert json.loads(result.stdout)["error"]["code"] == "USAGE"
+
+
+def test_fetch_unavailable_exit_4(cli: CliRunner, tmp_path: Path) -> None:
+    result = cli.invoke(
+        app,
+        [
+            "fetch",
             "doi:10.1000/closed",
-            "--out",
-            str(tmp_path),
+            "--output",
+            str(tmp_path / "paper.pdf"),
             "--json",
         ],
     )
     assert result.exit_code == 4
-    lines = [json.loads(line) for line in result.stdout.splitlines()]
-    assert len(lines) == 2
-    assert "data" in lines[0]
-    assert lines[1]["error"]["code"] == "FULLTEXT_UNAVAILABLE"
+    # Single-paper fetch errors travel in the stdout result stream.
+    error = json.loads(result.stdout)["error"]
+    assert error["code"] == "FULLTEXT_UNAVAILABLE"
+    assert error["details"]["publisher_url"] == "https://doi.org/10.1000/closed"
+
+
+def test_fetch_rejects_multiple_identifiers(cli: CliRunner, tmp_path: Path) -> None:
+    output = tmp_path / "papers" / "paper.pdf"
+    result = cli.invoke(
+        app,
+        [
+            "fetch",
+            "doi:10.1000/fake1",
+            "doi:10.1000/fake2",
+            "--output",
+            str(output),
+            "--json",
+        ],
+    )
+    assert result.exit_code == 2
+    assert not output.exists()
 
 
 def test_fetch_bad_format(cli: CliRunner) -> None:
@@ -262,7 +317,11 @@ def test_help_lists_available_plugins_and_descriptions() -> None:
     assert fetched.exit_code == 0
     for name in ("pmc_oa", "http_direct", "jats"):
         assert name in fetched.stdout
-    assert "default: ./papers" in fetched.stdout
+    assert "default: ./title.pdf" in fetched.stdout
+    assert "Output filename" in fetched.stdout
+    assert "Output directory" not in fetched.stdout
+    assert "One ID" in fetched.stdout
+    assert "Batch output" not in fetched.stdout
     expected_default = ", ".join(load_config().fetch.locators) or "all"
     assert f"'all' forces every registered locator (default: {expected_default})" in fetched.stdout
     root = runner.invoke(app, ["--help"])
@@ -275,12 +334,28 @@ def test_help_lists_available_plugins_and_descriptions() -> None:
 def test_fetch_locator_comma_separated(cli: CliRunner, tmp_path: Path) -> None:
     result = cli.invoke(
         app,
-        ["fetch", "doi:10.1000/fake1", "--locator", "fake", "--out", str(tmp_path), "--json"],
+        [
+            "fetch",
+            "doi:10.1000/fake1",
+            "--locator",
+            "fake",
+            "--output",
+            str(tmp_path / "paper.pdf"),
+            "--json",
+        ],
     )
     assert result.exit_code == 0
     bad = cli.invoke(
         app,
-        ["fetch", "doi:10.1000/fake1", "--locator", "nope,fake", "--out", str(tmp_path), "--json"],
+        [
+            "fetch",
+            "doi:10.1000/fake1",
+            "--locator",
+            "nope,fake",
+            "--output",
+            str(tmp_path / "paper.pdf"),
+            "--json",
+        ],
     )
     assert bad.exit_code == 2
     assert json.loads(bad.stdout)["error"]["code"] == "USAGE"
@@ -296,8 +371,8 @@ def test_fetch_locator_repeated_and_mixed(cli: CliRunner, tmp_path: Path) -> Non
             "fake",
             "--locator",
             "fake",
-            "--out",
-            str(tmp_path),
+            "--output",
+            str(tmp_path / "repeated.pdf"),
             "--json",
         ],
     )
@@ -311,8 +386,8 @@ def test_fetch_locator_repeated_and_mixed(cli: CliRunner, tmp_path: Path) -> Non
             "fake,fake",
             "--locator",
             "fake",
-            "--out",
-            str(tmp_path / "mixed"),
+            "--output",
+            str(tmp_path / "mixed.pdf"),
             "--json",
         ],
     )
@@ -321,7 +396,9 @@ def test_fetch_locator_repeated_and_mixed(cli: CliRunner, tmp_path: Path) -> Non
 
 def test_fetch_locators_config_default(cli: CliRunner, services: Services, tmp_path: Path) -> None:
     services.config.fetch.locators = ["fake"]
-    result = cli.invoke(app, ["fetch", "doi:10.1000/fake1", "--out", str(tmp_path), "--json"])
+    result = cli.invoke(
+        app, ["fetch", "doi:10.1000/fake1", "--output", str(tmp_path / "paper.pdf"), "--json"]
+    )
     assert result.exit_code == 0
 
 
@@ -361,7 +438,15 @@ def test_fetch_locator_all_overrides_config(
     services.config.fetch.locators = ["nope"]
     result = cli.invoke(
         app,
-        ["fetch", "doi:10.1000/fake1", "--locator", "all", "--out", str(tmp_path), "--json"],
+        [
+            "fetch",
+            "doi:10.1000/fake1",
+            "--locator",
+            "all",
+            "--output",
+            str(tmp_path / "paper.pdf"),
+            "--json",
+        ],
     )
     assert result.exit_code == 0
     assert json.loads(result.stdout)["data"]["source_url"] == "https://example.org/paper.pdf"

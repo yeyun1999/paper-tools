@@ -83,7 +83,7 @@ def test_pubmed_enrich_live(ctx: PluginContext) -> None:
 
 def test_fetch_xml_live(live_services: Services, tmp_path: Path) -> None:
     pmcid = _oa_pmcid(live_services)
-    result, _ = live_services.fetch.fetch(f"pmcid:{pmcid}", fmt="xml", out_dir=tmp_path / "out")
+    result, _ = live_services.fetch.fetch(f"pmcid:{pmcid}", fmt="xml", output=tmp_path / "out.xml")
     assert result.path.exists()
     assert b"article" in result.path.read_bytes()[:500]
     assert result.downloader in {"europepmc", "pmc_oa", "http_direct", "cache"}
@@ -101,7 +101,7 @@ def test_fetch_pdf_live(live_services: Services, tmp_path: Path) -> None:
     for pmcid in pmcids:
         try:
             result, _ = live_services.fetch.fetch(
-                f"pmcid:{pmcid}", fmt="pdf", out_dir=tmp_path / "out"
+                f"pmcid:{pmcid}", fmt="pdf", output=tmp_path / "out.pdf"
             )
         except PaperToolsError as exc:
             errors.append(f"{pmcid}: {exc.message}")
@@ -113,7 +113,7 @@ def test_fetch_pdf_live(live_services: Services, tmp_path: Path) -> None:
 
 def test_fetch_text_live(live_services: Services, tmp_path: Path) -> None:
     pmcid = _oa_pmcid(live_services)
-    result, _ = live_services.fetch.fetch(f"pmcid:{pmcid}", fmt="text", out_dir=tmp_path / "out")
+    result, _ = live_services.fetch.fetch(f"pmcid:{pmcid}", fmt="text", output=tmp_path / "out.txt")
     text = result.path.read_text(encoding="utf-8")
     assert len(text) > 500
     assert result.extractor in {"jats", "pypdf"}
@@ -258,7 +258,7 @@ def test_mcp_stdio_full_flow_live(tmp_path: Path) -> None:
                     {
                         "identifier": "pmcid:PMC13434336",
                         "format": "text",
-                        "out_dir": str(tmp_path / "out"),
+                        "output": str(tmp_path / "out.txt"),
                     },
                 )
             )
