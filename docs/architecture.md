@@ -113,7 +113,7 @@ paper-tools/
 │   │   ├── crossref.py         # Searcher + MetadataProvider
 │   │   ├── openalex.py         # Searcher + MetadataProvider + Locator
 │   │   ├── semantic_scholar.py # Searcher + MetadataProvider
-│   │   ├── unpaywall.py        # MetadataProvider(OA 字段) + Locator
+│   │   ├── unpaywall.py        # MetadataProvider(metadata + OA) + Locator
 │   │   ├── pmc_oa.py           # Locator + Downloader
 │   │   ├── http_direct.py      # Downloader（通用）
 │   │   ├── jats.py             # Extractor（XML→text）
@@ -337,7 +337,7 @@ class Extractor(Protocol):
 | crossref | Searcher + MetadataProvider | DOI 元数据权威源，`/works`；mailto polite pool；JATS 摘要清洗为纯文本；无可靠 OA 过滤（`--oa-only` 报 UsageError） |
 | openalex | Searcher + MetadataProvider + Locator | 元数据 + `best_oa_location` OA 定位；倒排索引摘要重建；cursor 分页；doi/openalex/pmid/pmcid 四路补全；可选 api_key（`Authorization: Bearer`，配后限流提至 10 req/s） |
 | semantic_scholar | Searcher + MetadataProvider | Graph API；`x-api-key` 支持；DOI/PMID/PMCID/S2/ARXIV 五路补全；1 req/s + 退避应对共享限额 |
-| unpaywall | MetadataProvider + Locator | enrich 只补 oa_status/license；resolve 按 DOI 查 OA 副本（需配置 email） |
+| unpaywall | MetadataProvider + Locator | enrich 补书目元数据与 OA 字段；resolve 按 DOI 查 OA 副本，PMC 仓库位置经 pmh_id 解析为官方数据集 PDF/XML（需配置 email） |
 | pmc_oa | Locator + Downloader | PMC ID Converter 选当前版本，读取 AWS Article Datasets 元数据定位并直接下载 PDF/XML；无可用记录返回空候选 |
 | http_direct | Downloader | 通用 HTTP 传输兜底；魔数/体积/XML 校验由 FetchService 统一执行 |
 | jats | Extractor | JATS XML → 纯文本（内置，无额外依赖） |

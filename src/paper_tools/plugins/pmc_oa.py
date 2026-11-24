@@ -81,6 +81,10 @@ class PmcOaLocator(_PmcOaBase):
         return candidates
 
 
+def resolve_pmc_candidates(pmcid: str, ctx: PluginContext) -> list[FullTextCandidate]:
+    return PmcOaLocator(ctx).resolve(Paper(identifiers={"pmcid": pmcid}))
+
+
 class PmcOaDownloader(_PmcOaBase):
     meta = PluginMeta(name="pmc_oa", version="0.1.0", description="PMC Article Datasets downloader")
     formats = frozenset({"pdf", "xml"})

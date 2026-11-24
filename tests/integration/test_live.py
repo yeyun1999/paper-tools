@@ -145,6 +145,31 @@ def test_unpaywall_enrich_live(live_services: Services) -> None:
     assert paper.oa_status in {"gold", "hybrid", "bronze", "green"}
 
 
+_UNPAYWALL_DOI = "10.1016/j.psj.2021.101646"
+
+
+def test_unpaywall_only_source_metadata_live(live_services: Services) -> None:
+    paper, warnings = live_services.metadata.enrich(
+        Paper(identifiers={"doi": _UNPAYWALL_DOI}), only_source="unpaywall"
+    )
+    assert paper.title
+    assert paper.authors
+    assert paper.oa_status == "gold"
+    assert warnings == []
+
+
+def test_unpaywall_pmc_pdf_regression_live(live_services: Services, tmp_path: Path) -> None:
+    result, warnings = live_services.fetch.fetch(
+        _UNPAYWALL_DOI,
+        fmt="pdf",
+        output=tmp_path / "out.pdf",
+        locators=["unpaywall"],
+    )
+    assert result.path.read_bytes().startswith(b"%PDF")
+    assert result.source_url.startswith("https://pmc-oa-opendata.s3.amazonaws.com/")
+    assert warnings == []
+
+
 _NUMPY_DOI = "10.1038/s41586-020-2649-2"  # stable, well-known OA paper
 
 

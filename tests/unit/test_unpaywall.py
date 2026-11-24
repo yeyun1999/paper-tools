@@ -9,6 +9,8 @@ import respx
 from paper_tools.core.errors import ConfigError
 from paper_tools.core.models import Paper
 from paper_tools.core.plugins import PluginContext
+from paper_tools.core.services import Services
+from paper_tools.plugins.pmc_oa import IDCONV, S3_BASE
 from paper_tools.plugins.unpaywall import API_BASE, UnpaywallLocator, UnpaywallMetadata
 
 DOI_URL = API_BASE + "10.1234/abc"
@@ -17,6 +19,11 @@ OA_PAYLOAD = {
     "is_oa": True,
     "oa_status": "gold",
     "doi_url": "https://doi.org/10.1234/abc",
+    "title": "A test paper",
+    "year": 2024,
+    "journal_name": "Test Journal",
+    "genre": "journal-article",
+    "z_authors": [{"raw_author_name": "First Author"}, {"raw_author_name": "Second Author"}],
     "best_oa_location": {
         "url_for_pdf": "https://pub.org/paper.pdf",
         "url_for_landing_page": "https://pub.org/paper",
@@ -63,6 +70,100 @@ def test_enrich_oa_status(unpaywall_ctx: PluginContext) -> None:
     assert paper.oa_status == "gold"
     assert paper.license == "cc-by"
     assert paper.publisher_url == "https://doi.org/10.1234/abc"
+    assert paper.title == "A test paper"
+    assert paper.year == 2024
+    assert paper.journal == "Test Journal"
+    assert paper.publication_type == "journal-article"
+    assert [author.name for author in paper.authors] == ["First Author", "Second Author"]
+
+
+@respx.mock
+def test_only_source_enrich_accepts_partial_metadata(
+    services: Services, unpaywall_ctx: PluginContext
+) -> None:
+    respx.get(DOI_URL).mock(return_value=httpx.Response(200, json=OA_PAYLOAD))
+    services.registry.register("metadata", UnpaywallMetadata(unpaywall_ctx))
+    paper, warnings = services.metadata.enrich(
+        Paper(identifiers={"doi": "10.1234/abc"}), only_source="unpaywall"
+    )
+    assert paper.title == "A test paper"
+    assert paper.oa_status == "gold"
+    assert paper.sources == ["unpaywall"]
+    assert warnings == []
+
+
+@respx.mock
+def test_locator_resolves_pmc_repository_copy(unpaywall_ctx: PluginContext) -> None:
+    payload = {
+        **OA_PAYLOAD,
+        "oa_locations": [
+            OA_PAYLOAD["best_oa_location"],
+            {
+                "host_type": "repository",
+                "pmh_id": "oai:pubmedcentral.nih.gov:123",
+                "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC123/",
+                "url_for_landing_page": "https://pmc.ncbi.nlm.nih.gov/articles/PMC123/",
+                "url_for_pdf": None,
+                "license": "cc-by-nc-nd",
+            },
+        ],
+    }
+    respx.get(DOI_URL).mock(return_value=httpx.Response(200, json=payload))
+    respx.get(IDCONV).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "records": [
+                    {
+                        "pmcid": "PMC123",
+                        "versions": [{"pmcid": "PMC123.1", "current": True}],
+                    }
+                ]
+            },
+        )
+    )
+    respx.get(f"{S3_BASE}/PMC123.1/PMC123.1.json").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "license_code": "cc-by-nc-nd",
+                "pdf_url": "s3://pmc-oa-opendata/PMC123.1/PMC123.1.pdf?md5=pdf-md5",
+                "xml_url": "s3://pmc-oa-opendata/PMC123.1/PMC123.1.xml?md5=xml-md5",
+            },
+        )
+    )
+    candidates = UnpaywallLocator(unpaywall_ctx).resolve(
+        Paper(identifiers={"doi": "10.1234/abc"})
+    )
+    urls = {(candidate.url, candidate.format, candidate.locator) for candidate in candidates}
+    assert ("https://pub.org/paper.pdf", "pdf", "unpaywall") in urls
+    assert (
+        f"{S3_BASE}/PMC123.1/PMC123.1.pdf?md5=pdf-md5",
+        "pdf",
+        "pmc_oa",
+    ) in urls
+    assert (
+        f"{S3_BASE}/PMC123.1/PMC123.1.xml?md5=xml-md5",
+        "xml",
+        "pmc_oa",
+    ) in urls
+
+
+@respx.mock
+def test_pmc_lookup_failure_keeps_unpaywall_candidates(unpaywall_ctx: PluginContext) -> None:
+    payload = {
+        **OA_PAYLOAD,
+        "oa_locations": [
+            OA_PAYLOAD["best_oa_location"],
+            {"pmh_id": "oai:pubmedcentral.nih.gov:123", "url": "https://repo.org/123"},
+        ],
+    }
+    respx.get(DOI_URL).mock(return_value=httpx.Response(200, json=payload))
+    respx.get(IDCONV).mock(return_value=httpx.Response(500))
+    candidates = UnpaywallLocator(unpaywall_ctx).resolve(
+        Paper(identifiers={"doi": "10.1234/abc"})
+    )
+    assert any(candidate.url == "https://pub.org/paper.pdf" for candidate in candidates)
 
 
 @respx.mock

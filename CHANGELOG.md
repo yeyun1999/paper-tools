@@ -12,6 +12,9 @@ JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.1**）：任何�
   不再调用返回 404 的旧接口；改用 PMC ID Converter 选择当前版本，并从官方
   `pmc-oa-opendata` 元数据获取 PDF/XML 直链。修复 PMC8851247 等文章的 PDF
   被误报为 `FULLTEXT_UNAVAILABLE`。
+- **修复 Unpaywall 部分元数据与 PMC 仓库副本**：补全标题、作者、年份、期刊和文献类型，
+  避免 `get --source unpaywall` 将有效记录误报为 `NOT_FOUND`；定位时将 PMC 仓库的
+  `pmh_id` 解析为官方数据集 PDF/XML，出版商直链下载失败时仍可获取仓库副本。
 
 ### 变更（破坏性：CLI）
 
