@@ -106,8 +106,83 @@ def test_fetch_default_output(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     result, _ = services.fetch.fetch("doi:10.1000/fake1")
-    assert result.path == Path("title.pdf")
+    assert result.path == Path("CRISPR_base_editing_review.pdf")
     assert result.path.read_bytes().startswith(b"%PDF")
+
+
+@pytest.mark.parametrize(
+    ("title", "filename"),
+    [
+        ("A/B: C?", "A_B_C.pdf"),
+        ("中文 标题", "中文_标题.pdf"),
+        ("CON", "_CON.pdf"),
+    ],
+)
+def test_fetch_default_output_sanitizes_title(
+    services: Services,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    title: str,
+    filename: str,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        services.metadata,
+        "enrich",
+        lambda paper: (Paper(title=title, identifiers=paper.identifiers, abstract="A"), []),
+    )
+    result, _ = services.fetch.fetch("doi:10.1000/fake1")
+    assert result.path == Path(filename)
+    assert result.path.exists()
+
+
+def test_fetch_default_output_uses_format_extension(
+    services: Services, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    result, _ = services.fetch.fetch("doi:10.1000/fake1", fmt="text")
+    assert result.path == Path("CRISPR_base_editing_review.txt")
+
+
+def test_fetch_default_output_appends_id_on_collision(
+    services: Services, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    Path("Same_title.pdf").write_bytes(b"existing")
+    monkeypatch.setattr(
+        services.metadata,
+        "enrich",
+        lambda paper: (Paper(title="Same title", identifiers=paper.identifiers, abstract="A"), []),
+    )
+    result, _ = services.fetch.fetch("doi:10.1000/fake1")
+    assert result.path == Path("Same_title_10.1000_fake1.pdf")
+    repeated, _ = services.fetch.fetch("doi:10.1000/fake1")
+    assert repeated.path == result.path
+    other, _ = services.fetch.fetch("doi:10.1000/fake2")
+    assert other.path == Path("Same_title_10.1000_fake2.pdf")
+
+
+def test_fetch_default_output_appends_pmid(
+    services: Services, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    Path("Same_title.pdf").write_bytes(b"existing")
+    monkeypatch.setattr(
+        services.metadata,
+        "enrich",
+        lambda paper: (Paper(title="Same title", identifiers=paper.identifiers, abstract="A"), []),
+    )
+    result, _ = services.fetch.fetch("pmid:111")
+    assert result.path == Path("Same_title_111.pdf")
+
+
+def test_fetch_configured_output_overrides_title_default(
+    services: Services, tmp_path: Path
+) -> None:
+    output = tmp_path / "configured.pdf"
+    services.config.fetch.output = str(output)
+    result, _ = services.fetch.fetch("doi:10.1000/fake1")
+    assert result.path == output
 
 
 @pytest.mark.parametrize(

@@ -57,6 +57,7 @@ Paper 的 `fulltext_links` 字段（schema 1.1）在搜索/补全期就捕获源
 # OA 全文：pdf / xml / text（text 走 下载→提取 流水线，优先 XML）
 uv run paper-tools fetch pmcid:PMC13434336 --output papers/paper.txt --json
 uv run paper-tools fetch doi:10.1093/nar/gkag769 --format pdf --json
+# 未指定 --output：当前目录使用安全化文章标题；重名追加 DOI/PMID 等 ID
 
 # 分页：取 next_cursor 原样回传续传（多源时 next_cursor 是免转义的 'ms1.' 聚合游标；
 # 单源游标是不透明字符串。多源 total 为去重前各源之和，近似值）

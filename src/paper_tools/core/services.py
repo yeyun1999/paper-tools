@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -57,6 +58,43 @@ _OUTPUT_EXTENSIONS: dict[str, ArtifactFormat] = {
     ".txt": "text",
 }
 _FORMAT_EXTENSIONS: dict[ArtifactFormat, str] = {"pdf": ".pdf", "xml": ".xml", "text": ".txt"}
+_ID_OUTPUT_PRIORITY = ("doi", "pmid", "pmcid", "openalex", "s2", "arxiv", "url")
+_WINDOWS_RESERVED_NAMES = {
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    "COM1",
+    "COM2",
+    "COM3",
+    "COM4",
+    "COM5",
+    "COM6",
+    "COM7",
+    "COM8",
+    "COM9",
+    "LPT1",
+    "LPT2",
+    "LPT3",
+    "LPT4",
+    "LPT5",
+    "LPT6",
+    "LPT7",
+    "LPT8",
+    "LPT9",
+}
+
+
+def _filename_slug(value: str, *, max_bytes: int = 160) -> str:
+    value = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", value)
+    value = re.sub(r"\s+", "_", value)
+    value = re.sub(r"_+", "_", value).strip(" ._-") or "paper"
+    value = value.encode("utf-8")[:max_bytes].decode("utf-8", errors="ignore").rstrip(" ._-")
+    value = value or "paper"
+    if value.partition(".")[0].upper() in _WINDOWS_RESERVED_NAMES:
+        value = f"_{value}"
+    return value
+
 
 _MULTI_CURSOR_PREFIX = "ms1."
 # Percent-style escaping is applied to the cursor values only; the order
@@ -329,6 +367,8 @@ class FetchService:
         output_path, artifact_format = self._resolve_output(fmt, output)
         stub = Paper(identifiers={ident.kind: ident.value})
         paper, warnings = self._metadata.enrich(stub)
+        if output_path is None:
+            output_path = self._default_output(paper, artifact_format, ident.value)
 
         candidates = self._collect_candidates(paper, locators, warnings)
         attempts: list[str] = []
@@ -364,8 +404,11 @@ class FetchService:
 
     def _resolve_output(
         self, fmt: ArtifactFormat | None, output: Path | None
-    ) -> tuple[Path, ArtifactFormat]:
-        output_path = output or Path(self._config.fetch.output)
+    ) -> tuple[Path | None, ArtifactFormat]:
+        configured_output = self._config.fetch.output
+        output_path = output or (Path(configured_output) if configured_output else None)
+        if output_path is None:
+            return None, fmt or "pdf"
         if output_path.exists() and output_path.is_dir():
             raise UsageError(f"Output path is a directory: {output_path}")
         suffix = output_path.suffix.lower()
@@ -383,6 +426,22 @@ class FetchService:
         if not suffix:
             output_path = output_path.with_suffix(_FORMAT_EXTENSIONS[artifact_format])
         return output_path, artifact_format
+
+    def _default_output(self, paper: Paper, fmt: ArtifactFormat, fallback_id: str) -> Path:
+        title_slug = _filename_slug(paper.title or "paper")
+        extension = _FORMAT_EXTENSIONS[fmt]
+        output_path = Path(f"{title_slug}{extension}")
+        if not output_path.exists():
+            return output_path
+        identifier = next(
+            (
+                paper.identifiers[kind]
+                for kind in _ID_OUTPUT_PRIORITY
+                if paper.identifiers.get(kind)
+            ),
+            fallback_id,
+        )
+        return Path(f"{title_slug}_{_filename_slug(identifier, max_bytes=80)}{extension}")
 
     def _collect_candidates(
         self, paper: Paper, locators: list[str] | None, warnings: list[str]

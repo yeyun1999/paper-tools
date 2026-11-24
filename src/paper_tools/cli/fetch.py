@@ -19,13 +19,15 @@ try:
 except ConfigError:
     _FETCH_CONFIG = FetchConfig()
 _DEFAULT_LOCATORS = ", ".join(_FETCH_CONFIG.locators) if _FETCH_CONFIG.locators else "all"
+_DEFAULT_OUTPUT = _FETCH_CONFIG.output or "safe article title in the current directory"
 _FORMAT_HELP = (
     "Output format: pdf | xml | text (download + extract). If omitted, infer from the "
     "--output extension; default to pdf when no extension is present."
 )
 _OUTPUT_HELP = (
-    f"Output filename (default: {_FETCH_CONFIG.output}). Extensions .pdf/.xml/.txt infer "
-    "--format when omitted; a missing extension is appended."
+    f"Output filename (default: {_DEFAULT_OUTPUT}). A duplicate default title gets an ID "
+    "suffix. Extensions .pdf/.xml/.txt infer --format when omitted; a missing extension "
+    "is appended."
 )
 _LOCATOR_HELP = (
     "Locator plugins to restrict to; repeat the flag or comma-separate. "

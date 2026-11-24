@@ -106,7 +106,10 @@ def test_param_descriptions_mirror_cli_help(server: Any) -> None:
     assert "Available: fake" in desc("fetch_fulltext", "locator")
     assert "Available: fake_dl" in desc("fetch_fulltext", "downloader")
     assert "Available: fake_ext" in desc("fetch_fulltext", "extractor")
-    assert "default: ./title.pdf" in desc("fetch_fulltext", "output")
+    assert "default: safe article title in the current directory" in desc(
+        "fetch_fulltext", "output"
+    )
+    assert "duplicate default title gets an ID suffix" in desc("fetch_fulltext", "output")
     assert "infer" in desc("fetch_fulltext", "format")
 
 
@@ -151,6 +154,15 @@ def test_fetch_fulltext_pdf(server: Any, tmp_path: Path) -> None:
     assert path == output
     assert path.read_bytes().startswith(b"%PDF")
     assert payload["data"]["format"] == "pdf"
+
+
+def test_fetch_fulltext_default_title(
+    server: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    payload = _call(server, "fetch_fulltext", {"identifier": "doi:10.1000/fake1"})
+    assert Path(payload["data"]["path"]) == Path("CRISPR_base_editing_review.pdf")
+    assert (tmp_path / "CRISPR_base_editing_review.pdf").exists()
 
 
 def test_fetch_fulltext_text_provenance(server: Any, tmp_path: Path) -> None:

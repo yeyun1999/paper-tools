@@ -35,7 +35,7 @@ class FetchConfig(BaseModel):
     format_priority: list[ArtifactFormat] = Field(
         default_factory=lambda: list(_DEFAULT_FORMAT_PRIORITY)
     )
-    output: str = "./title.pdf"
+    output: str | None = None
     locators: list[str] = Field(default_factory=list)  # empty = all registered locators
 
 

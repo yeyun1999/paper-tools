@@ -13,9 +13,10 @@ JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.1**）：任何�
   stdout 结果流；MCP `fetch_fulltext` 本就单篇，不受影响；`get` 的批量 NDJSON 保持不变。
 
 - **`fetch` 输出参数改为文件名**：CLI `--out DIR` 改为 `--output FILE`，MCP `out_dir`
-  改为 `output`，配置 `fetch.out_dir` 改为 `fetch.output`；默认输出为当前目录的
-  `./title.pdf`。未指定格式时按 `.pdf` / `.xml` / `.txt` 推断，无扩展名时按格式补全
-  （未指定格式则 PDF）；格式与扩展名冲突或不支持扩展名返回 `USAGE`。
+  改为 `output`，配置 `fetch.out_dir` 改为可选的 `fetch.output`。默认使用当前目录下的
+  安全化文章标题，重名时追加 DOI（其次 PMID/PMCID 等 ID）；显式 `output` 保持固定文件名。
+  未指定格式时按 `.pdf` / `.xml` / `.txt` 推断，无扩展名时按格式补全（默认 PDF）；
+  格式与扩展名冲突或不支持扩展名返回 `USAGE`。
 
 ### 变更（破坏性：schema_version 1.0 → 1.1）
 

@@ -18,7 +18,7 @@ def test_defaults() -> None:
     config = load_config(Path("/nonexistent/config.toml"))
     assert config.general.default_source == "pubmed"
     assert config.general.timeout == 30.0
-    assert config.fetch.output == "./title.pdf"
+    assert config.fetch.output is None
 
 
 def test_file_loading(tmp_path: Path) -> None:

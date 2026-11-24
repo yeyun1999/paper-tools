@@ -170,8 +170,8 @@ def test_fetch_default_output(
     assert result.exit_code == 0
     data = json.loads(result.stdout)["data"]
     assert data["format"] == "pdf"
-    assert Path(data["path"]) == Path("title.pdf")
-    assert (tmp_path / "title.pdf").exists()
+    assert Path(data["path"]) == Path("CRISPR_base_editing_review.pdf")
+    assert (tmp_path / "CRISPR_base_editing_review.pdf").exists()
 
 
 def test_fetch_format_output_mismatch(cli: CliRunner, tmp_path: Path) -> None:
@@ -317,7 +317,8 @@ def test_help_lists_available_plugins_and_descriptions() -> None:
     assert fetched.exit_code == 0
     for name in ("pmc_oa", "http_direct", "jats"):
         assert name in fetched.stdout
-    assert "default: ./title.pdf" in fetched.stdout
+    assert "default: safe article title in the current directory" in fetched.stdout
+    assert "duplicate default title gets an ID suffix" in fetched.stdout
     assert "Output filename" in fetched.stdout
     assert "Output directory" not in fetched.stdout
     assert "One ID" in fetched.stdout

@@ -24,7 +24,7 @@ uv run paper-tools fetch doi:10.1093/nar/gkag769 --format pdf
 uv run paper-tools sources                            # 查看已注册插件
 ```
 
-`fetch` 每次只接受一个文献标识符；需要获取多篇全文时请逐篇调用。`get` 仍支持多 ID 批量查询。全文默认保存到当前目录的 `title.pdf`，可用 `--output FILE` 指定文件名；未指定 `--format` 时按 `.pdf` / `.xml` / `.txt` 扩展名推断格式。
+`fetch` 每次只接受一个文献标识符；需要获取多篇全文时请逐篇调用。`get` 仍支持多 ID 批量查询。全文默认使用安全化的文章标题作为文件名并保存到当前目录，重名时追加 DOI/PMID 等 ID；可用 `--output FILE` 指定固定文件名，未指定 `--format` 时按 `.pdf` / `.xml` / `.txt` 扩展名推断格式。
 
 AI 助理除 `--json` CLI 外，还可挂载 MCP 服务器（stdio，四个工具与 CLI 契约一致）：
 

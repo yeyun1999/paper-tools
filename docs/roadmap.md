@@ -73,7 +73,7 @@
 - [x] `plugins/europepmc.py` 增加 Locator + Downloader：fullTextXML（PDF 直链由 pmc_oa/unpaywall 覆盖）
 - [x] `plugins/jats.py`：Extractor（XML→纯文本，内置）；`plugins/pypdf_extractor.py`：Extractor（PDF→纯文本，extra `text`）
 - [x] FetchService 编排落地：去重（URL+格式）、排序（格式>可信度>license）、supports() 路由、降级、landing 兜底、提取阶段
-- [x] CLI `fetch`：--format/--output/--locator/--downloader/--extractor、输出文件名默认 `./title.pdf`、按扩展名推断格式（初版支持批量 NDJSON，现改为单篇输入）
+- [x] CLI `fetch`：--format/--output/--locator/--downloader/--extractor、默认使用安全化文章标题（重名追加 ID）、按扩展名推断格式（初版支持批量 NDJSON，现改为单篇输入）
 - [x] 文件缓存与提取文本缓存命中路径；respx 回放 + live 冒烟
 
 **验收**：已知 OA DOI 拿到 PDF 且魔数校验通过；PMC 文献拿到 XML；`--format text` 走"下载→提取"流水线且 FullText 记录 extractor/extracted_from；闭源 DOI 返回 `FULLTEXT_UNAVAILABLE` + 出版商链接 + 退出码 4；重复 fetch 命中缓存（含 text 不重复下载）；Unpaywall 缺 email 时退出码 5。

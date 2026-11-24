@@ -73,7 +73,7 @@ def build_server(opts: GlobalOpts | None = None) -> MCPServer[Any]:
 
     default_source = services.config.general.default_source
     default_locators = ", ".join(services.config.fetch.locators) or "all"
-    default_output = services.config.fetch.output
+    default_output = services.config.fetch.output or "safe article title in the current directory"
 
     @server.tool(
         description=(
@@ -200,8 +200,9 @@ def build_server(opts: GlobalOpts | None = None) -> MCPServer[Any]:
         output: str | None = Field(
             default=None,
             description=(
-                f"Output filename (default: {default_output}). Extensions .pdf/.xml/.txt infer "
-                "format when omitted; a missing extension is appended."
+                f"Output filename (default: {default_output}). A duplicate default title gets "
+                "an ID suffix. Extensions .pdf/.xml/.txt infer format when omitted; a missing "
+                "extension is appended."
             ),
         ),
         locator: str | None = Field(
