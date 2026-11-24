@@ -111,6 +111,21 @@ def test_fetch_pdf_live(live_services: Services, tmp_path: Path) -> None:
     pytest.fail(f"no OA PDF retrievable from {len(pmcids)} PLOS ONE candidates: {errors}")
 
 
+@pytest.mark.parametrize(
+    "identifier", ["pmcid:PMC8851247", "doi:10.1016/j.psj.2021.101646"]
+)
+def test_pmc_aws_pdf_regression_live(ctx: PluginContext, tmp_path: Path, identifier: str) -> None:
+    registry = PluginRegistry.discover(ctx)
+    services = Services(config=ctx.config, cache=ctx.cache, registry=registry)
+    result, warnings = services.fetch.fetch(
+        identifier, fmt="pdf", output=tmp_path / "out.pdf", locators=["pmc_oa"]
+    )
+    assert result.path.read_bytes().startswith(b"%PDF")
+    assert result.source_url.startswith("https://pmc-oa-opendata.s3.amazonaws.com/")
+    assert result.downloader == "pmc_oa"
+    assert not warnings
+
+
 def test_fetch_text_live(live_services: Services, tmp_path: Path) -> None:
     pmcid = _oa_pmcid(live_services)
     result, _ = live_services.fetch.fetch(f"pmcid:{pmcid}", fmt="text", output=tmp_path / "out.txt")

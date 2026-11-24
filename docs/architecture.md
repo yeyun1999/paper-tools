@@ -325,7 +325,7 @@ class Extractor(Protocol):
 
 - **enrich 统一了"按 ID 取详情"与"补全浅记录"**：`get doi:...` 就是构造只含该标识符的 stub 走补全链；search 结果的补全是同一条链。补全来源不必是搜索引擎（Unpaywall 补 OA 状态/license）。
 - **Locator 只找不下**：产出的候选由 FetchService 路由给 `supports()` 返回 True 的 Downloader；`landing` 候选永不下载，仅兜底展示。
-- **Downloader 按候选路由而非按 Paper**：`http_direct` 支持任意 http(s) 直链；`pmc_oa` 只支持 PMC OA 的地址（tar.gz 内存解包，不落盘解压）；`europepmc` 只支持自家 fullTextXML 地址（PDF 由 pmc_oa/unpaywall 覆盖）。
+- **Downloader 按候选路由而非按 Paper**：`http_direct` 支持任意 http(s) 直链；`pmc_oa` 只支持 PMC Article Datasets 的 AWS 地址，直接下载单篇 PDF/XML；`europepmc` 只支持自家 fullTextXML 地址（PDF 由 pmc_oa/unpaywall 覆盖）。
 - **Extractor 与下载正交**：`--format text` 时按产物格式选提取器（XML→jats，PDF→pypdf），可被第三方替换（GROBID、marker）；提取结果记录 `extractor` 与 `extracted_from` 溯源。
 
 ### 7.3 内置插件清单
@@ -338,7 +338,7 @@ class Extractor(Protocol):
 | openalex | Searcher + MetadataProvider + Locator | 元数据 + `best_oa_location` OA 定位；倒排索引摘要重建；cursor 分页；doi/openalex/pmid/pmcid 四路补全；可选 api_key（`Authorization: Bearer`，配后限流提至 10 req/s） |
 | semantic_scholar | Searcher + MetadataProvider | Graph API；`x-api-key` 支持；DOI/PMID/PMCID/S2/ARXIV 五路补全；1 req/s + 退避应对共享限额 |
 | unpaywall | MetadataProvider + Locator | enrich 只补 oa_status/license；resolve 按 DOI 查 OA 副本（需配置 email） |
-| pmc_oa | Locator + Downloader | PMC OA Web Service 定位（pmid/doi 经 idconv 换 PMCID），tar.gz 内存解包取 PDF/XML；非 OA 子集返回空候选 |
+| pmc_oa | Locator + Downloader | PMC ID Converter 选当前版本，读取 AWS Article Datasets 元数据定位并直接下载 PDF/XML；无可用记录返回空候选 |
 | http_direct | Downloader | 通用 HTTP 传输兜底；魔数/体积/XML 校验由 FetchService 统一执行 |
 | jats | Extractor | JATS XML → 纯文本（内置，无额外依赖） |
 | pypdf | Extractor | PDF → 纯文本（extra `text`），质量有限需标注 |
@@ -365,7 +365,7 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 ### 8.3 FetchService（定位 → 下载 → 提取）
 
 1. **收集**：先以 `paper.fulltext_links`（搜索/补全期捕获的链接）作为种子候选，再调用所有 Locator 的 `resolve(paper)` 补充（合并而非短路，保留降级多样性）；Locator 的 `ConfigError`/上游错误降级为 `warnings` 并跳过该定位器（单个定位器缺配置不阻断 fetch，如未配 Unpaywall email 仍可用其余定位器）。补全链的 `ConfigError` 则保持严格传播（退出码 5）。
-2. **去重排序**：按 URL+格式 去重（同一 tar.gz 可同时产出 XML 与 PDF 候选）；排序键 = 格式匹配度 > 来源可信度（europepmc/pmc_oa 直链 > unpaywall 出版商直链 > 其他）> license 明确度。
+2. **去重排序**：按 URL+格式 去重（同一 PMC 版本可同时产出 XML 与 PDF 候选）；排序键 = 格式匹配度 > 来源可信度（europepmc/pmc_oa 直链 > unpaywall 出版商直链 > 其他）> license 明确度。
 3. **下载与校验**：候选路由给 `supports()` 且 `formats` 匹配的 Downloader；PDF 校验 `%PDF` 魔数与最小体积，XML 校验可解析且含 `<article>`；失败自动降级下一候选。
 4. **提取（仅 --format text）**：产物按格式选 Extractor（XML→jats 优先；PDF→pypdf，可用 `--extractor` 强制指定）；输出 `.txt` 并记录 `extractor`/`extracted_from`。
 5. **落盘与缓存**：未指定 `--output` / `fetch.output` 时，在当前目录使用安全化文章标题作为文件名；重名时追加 DOI（其次 PMID/PMCID 等 ID）。显式输出保持固定文件名。未指定格式时按 `.pdf` / `.xml` / `.txt` 推断，无扩展名时补全（默认 PDF），格式与扩展名冲突返回 `USAGE`。同时写入文件缓存 `cache/papers/<sha256>.<ext>` + 映射 sidecar（sha256/ext/最终格式/extractor/extracted_from）。缓存存的是**最终产物**（text 请求存已提取文本），命中时跳过重复校验与重复提取，并恢复提取溯源；重复请求不重复下载。

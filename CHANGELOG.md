@@ -6,6 +6,13 @@ JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.1**）：任何�
 
 ## [未发布]
 
+### 修复
+
+- **PMC 全文获取迁移至 AWS Article Datasets**：PMC OA Web Service 停用后，`pmc_oa`
+  不再调用返回 404 的旧接口；改用 PMC ID Converter 选择当前版本，并从官方
+  `pmc-oa-opendata` 元数据获取 PDF/XML 直链。修复 PMC8851247 等文章的 PDF
+  被误报为 `FULLTEXT_UNAVAILABLE`。
+
 ### 变更（破坏性：CLI）
 
 - **`fetch` 改为单篇输入**：`fetch ID` 每次只获取一篇文献，传入多个 ID 返回用法错误

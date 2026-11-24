@@ -1,63 +1,106 @@
-"""PMC OA Subset plugin tests: OA service XML replay + in-memory tar.gz packages."""
+"""PMC Article Datasets plugin tests: ID conversion, AWS metadata, direct files."""
 
 from __future__ import annotations
-
-import io
-import tarfile
 
 import httpx
 import pytest
 import respx
 
-from paper_tools.core.errors import UpstreamError
 from paper_tools.core.models import FullTextCandidate, Paper
 from paper_tools.core.plugins import PluginContext
-from paper_tools.plugins.pmc_oa import IDCONV, OA_SERVICE, PmcOaDownloader, PmcOaLocator
+from paper_tools.plugins.pmc_oa import IDCONV, S3_BASE, PmcOaDownloader, PmcOaLocator
 from tests.conftest import PDF_BYTES, XML_BYTES
 
-TGZ_URL = "https://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_package/ab/cd/PMC123.tar.gz"
-OA_XML = (
-    b"<OA><records><record id='PMC123'>"
-    b"<link format='tgz' href='ftp://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_package/ab/cd/PMC123.tar.gz'/>"
-    b"</record></records></OA>"
-)
-OA_ERROR_XML = b"<OA><error code='idIsNotOpenAccess'>not in OA subset</error></OA>"
+VERSION = "PMC123.1"
+PDF_URL = f"{S3_BASE}/{VERSION}/{VERSION}.pdf"
+XML_URL = f"{S3_BASE}/{VERSION}/{VERSION}.xml"
+METADATA_URL = f"{S3_BASE}/{VERSION}/{VERSION}.json"
+RECORD = {
+    "pmcid": "PMC123",
+    "pmid": 999,
+    "doi": "10.1234/abc",
+    "versions": [{"pmcid": VERSION, "current": True}],
+}
+METADATA = {
+    "pmcid": "PMC123",
+    "version": 1,
+    "license_code": "CC BY-NC-ND",
+    "pdf_url": f"s3://pmc-oa-opendata/{VERSION}/{VERSION}.pdf?md5=pdf-md5",
+    "xml_url": f"s3://pmc-oa-opendata/{VERSION}/{VERSION}.xml?md5=xml-md5",
+}
 
 
-def make_package(files: dict[str, bytes]) -> bytes:
-    buffer = io.BytesIO()
-    with tarfile.open(fileobj=buffer, mode="w:gz") as tf:
-        for name, data in files.items():
-            info = tarfile.TarInfo(name=name)
-            info.size = len(data)
-            tf.addfile(info, io.BytesIO(data))
-    return buffer.getvalue()
-
-
-PACKAGE = make_package({"PMC123/paper.nxml": XML_BYTES, "PMC123/paper.pdf": PDF_BYTES})
-
-
-@respx.mock
-def test_locator_tgz_yields_xml_and_pdf(plugin_ctx: PluginContext) -> None:
-    respx.get(OA_SERVICE).mock(return_value=httpx.Response(200, content=OA_XML))
-    candidates = PmcOaLocator(plugin_ctx).resolve(Paper(identifiers={"pmcid": "PMC123"}))
-    assert {(c.url, c.format) for c in candidates} == {(TGZ_URL, "xml"), (TGZ_URL, "pdf")}
-    assert all(c.locator == "pmc_oa" for c in candidates)
-
-
-@respx.mock
-def test_locator_resolves_pmid_via_idconv(plugin_ctx: PluginContext) -> None:
+def mock_lookup(record: dict[str, object] | None = RECORD) -> None:
+    records = [record] if record else []
     respx.get(IDCONV).mock(
-        return_value=httpx.Response(200, json={"records": [{"pmcid": "PMC123"}]})
+        return_value=httpx.Response(200, json={"status": "ok", "records": records})
     )
-    respx.get(OA_SERVICE).mock(return_value=httpx.Response(200, content=OA_XML))
-    candidates = PmcOaLocator(plugin_ctx).resolve(Paper(identifiers={"pmid": "999"}))
-    assert candidates
+
+
+def mock_metadata(metadata: dict[str, object] = METADATA) -> None:
+    respx.get(METADATA_URL).mock(return_value=httpx.Response(200, json=metadata))
 
 
 @respx.mock
-def test_locator_not_open_access(plugin_ctx: PluginContext) -> None:
-    respx.get(OA_SERVICE).mock(return_value=httpx.Response(200, content=OA_ERROR_XML))
+def test_locator_yields_direct_pdf_and_xml(plugin_ctx: PluginContext) -> None:
+    mock_lookup()
+    mock_metadata()
+    candidates = PmcOaLocator(plugin_ctx).resolve(Paper(identifiers={"pmcid": "PMC123"}))
+    assert {(c.url, c.format) for c in candidates} == {
+        (f"{PDF_URL}?md5=pdf-md5", "pdf"),
+        (f"{XML_URL}?md5=xml-md5", "xml"),
+    }
+    assert all(c.locator == "pmc_oa" for c in candidates)
+    assert all(c.license == "CC BY-NC-ND" for c in candidates)
+
+
+@respx.mock
+@pytest.mark.parametrize(("kind", "value"), [("pmid", "999"), ("doi", "10.1234/abc")])
+def test_locator_resolves_identifier_via_idconv(
+    plugin_ctx: PluginContext, kind: str, value: str
+) -> None:
+    mock_lookup()
+    mock_metadata()
+    candidates = PmcOaLocator(plugin_ctx).resolve(Paper(identifiers={kind: value}))
+    assert [candidate.format for candidate in candidates] == ["pdf", "xml"]
+
+
+@respx.mock
+def test_locator_selects_current_version(plugin_ctx: PluginContext) -> None:
+    mock_lookup(
+        {
+            **RECORD,
+            "versions": [
+                {"pmcid": "PMC123.1", "current": False},
+                {"pmcid": "PMC123.2", "current": True},
+            ],
+        }
+    )
+    respx.get(f"{S3_BASE}/PMC123.2/PMC123.2.json").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                **METADATA,
+                "pdf_url": None,
+                "xml_url": "s3://pmc-oa-opendata/PMC123.2/PMC123.2.xml?md5=xml-md5",
+            },
+        )
+    )
+    candidates = PmcOaLocator(plugin_ctx).resolve(Paper(identifiers={"pmcid": "PMC123"}))
+    assert [(c.url, c.format) for c in candidates] == [
+        (f"{S3_BASE}/PMC123.2/PMC123.2.xml?md5=xml-md5", "xml")
+    ]
+
+
+@respx.mock
+def test_locator_no_record(plugin_ctx: PluginContext) -> None:
+    mock_lookup(None)
+    assert PmcOaLocator(plugin_ctx).resolve(Paper(identifiers={"pmid": "999"})) == []
+
+
+@respx.mock
+def test_locator_embargoed_record(plugin_ctx: PluginContext) -> None:
+    mock_lookup({**RECORD, "live": False})
     assert PmcOaLocator(plugin_ctx).resolve(Paper(identifiers={"pmcid": "PMC123"})) == []
 
 
@@ -67,42 +110,25 @@ def test_locator_no_identifiers(plugin_ctx: PluginContext) -> None:
 
 @respx.mock
 @pytest.mark.parametrize(("fmt", "expected"), [("xml", XML_BYTES), ("pdf", PDF_BYTES)])
-def test_downloader_extracts_from_package(
+def test_downloader_fetches_direct_file(
     plugin_ctx: PluginContext, fmt: str, expected: bytes
 ) -> None:
-    respx.get(TGZ_URL).mock(return_value=httpx.Response(200, content=PACKAGE))
-    candidate = FullTextCandidate(url=TGZ_URL, format=fmt, locator="pmc_oa")  # type: ignore[arg-type]
+    url = PDF_URL if fmt == "pdf" else XML_URL
+    respx.get(url).mock(return_value=httpx.Response(200, content=expected))
+    candidate = FullTextCandidate(url=url, format=fmt, locator="pmc_oa")  # type: ignore[arg-type]
     artifact = PmcOaDownloader(plugin_ctx).download(candidate)
     assert artifact.content == expected
     assert artifact.downloader == "pmc_oa"
 
 
-@respx.mock
-def test_downloader_missing_member(plugin_ctx: PluginContext) -> None:
-    pdf_only = make_package({"PMC123/paper.pdf": PDF_BYTES})
-    respx.get(TGZ_URL).mock(return_value=httpx.Response(200, content=pdf_only))
-    candidate = FullTextCandidate(url=TGZ_URL, format="xml", locator="pmc_oa")
-    with pytest.raises(UpstreamError):
-        PmcOaDownloader(plugin_ctx).download(candidate)
-
-
-@respx.mock
-def test_direct_pdf_link(plugin_ctx: PluginContext) -> None:
-    pdf_url = "https://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_pdf/ab/cd/PMC123.pdf"
-    oa_xml = (
-        b"<OA><records><record id='PMC123'>"
-        b"<link format='pdf' href='" + pdf_url.encode() + b"'/>"
-        b"</record></records></OA>"
+def test_supports_only_pmc_dataset_candidates(plugin_ctx: PluginContext) -> None:
+    downloader = PmcOaDownloader(plugin_ctx)
+    assert downloader.supports(FullTextCandidate(url=PDF_URL, format="pdf", locator="pmc_oa"))
+    assert not downloader.supports(
+        FullTextCandidate(url=PDF_URL, format="pdf", locator="unpaywall")
     )
-    respx.get(OA_SERVICE).mock(return_value=httpx.Response(200, content=oa_xml))
-    respx.get(pdf_url).mock(return_value=httpx.Response(200, content=PDF_BYTES))
-    candidates = PmcOaLocator(plugin_ctx).resolve(Paper(identifiers={"pmcid": "PMC123"}))
-    assert [(c.url, c.format) for c in candidates] == [(pdf_url, "pdf")]
-    artifact = PmcOaDownloader(plugin_ctx).download(candidates[0])
-    assert artifact.content == PDF_BYTES
-
-
-def test_supports_only_pmc_oa_candidates(plugin_ctx: PluginContext) -> None:
-    dl = PmcOaDownloader(plugin_ctx)
-    assert dl.supports(FullTextCandidate(url=TGZ_URL, format="xml", locator="pmc_oa"))
-    assert not dl.supports(FullTextCandidate(url=TGZ_URL, format="xml", locator="unpaywall"))
+    assert not downloader.supports(
+        FullTextCandidate(
+            url="https://example.org/PMC123.1.pdf", format="pdf", locator="pmc_oa"
+        )
+    )

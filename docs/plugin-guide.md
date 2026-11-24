@@ -107,7 +107,7 @@ class MyDownloader:
 - `supports()` 按 URL 前缀 / `candidate.locator` 判断；专用下载器先于通用 `http_direct` 被路由。
 - `Artifact(format, content, source_url, downloader, license?)`：`downloader == meta.name`。
 - 魔数（PDF `%PDF` + ≥1KB）、XML 合法性（defusedxml + 根 `article`）、体积校验由
-  FetchService 统一执行，插件无需重复；打包格式（如 PMC tar.gz）在内存解包，不落盘解压。
+  FetchService 统一执行，插件无需重复；若上游返回打包格式，只能在内存解包，不落盘解压。
 - 普通 HTTP 直链无需写下载器：`http_direct` 已覆盖。
 
 ### Extractor
