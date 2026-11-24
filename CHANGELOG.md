@@ -59,7 +59,10 @@ JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.1**）：任何�
   （identifiers 并集、sources 溯源、冲突告警），轮转交错排序；失败源降级 warning。
   `--limit` 仅约束每个源的返回量，合并去重后不截断（发布前调整：此前多源页会在全局
   截断到 limit，导致被截掉的候选随游标推进丢失）。
-  多源 `next_cursor` 为 JSON 聚合游标 `{source: cursor}`（单源游标不变）；`total` 为
+  多源 `next_cursor` 为免转义聚合游标 `ms1.<源名>:<游标>,...`（游标段对 `% : ,` 最小
+  百分号转义；命令行整体加引号即可，无嵌套 JSON 转义之扰；发布前调整，替代原 JSON
+  聚合游标；输入端仍兼容裸 JSON 对象）；插件注册名新增字符合约（`[A-Za-z0-9]` 开头，
+  仅允许字母数字与 `._-`，不合规抛 `PluginError`）；单源游标不变；`total` 为
   去重前各源之和（近似）。服务层 `SearchService.search` 参数 `source: str` 改为
   `sources: list[str]`（发布前调整）。
 - **OpenAlex api_key 支持**：配置 `plugins.openalex.api_key` 后，检索/补全/定位全部请求

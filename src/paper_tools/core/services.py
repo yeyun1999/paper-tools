@@ -53,6 +53,58 @@ _FILEMAP_TTL = 30 * 86400
 _TRUSTED_LOCATORS = {"europepmc", "pmc_oa"}
 _PREFERRED_EXTRACTORS = {"xml": "jats", "pdf": "pypdf"}
 
+_MULTI_CURSOR_PREFIX = "ms1."
+# Percent-style escaping is applied to the cursor values only; the order
+# matters (escape % first, unescape % last) so literal "%3A" survives round-trips.
+_CURSOR_ESCAPES = (("%", "%25"), (":", "%3A"), (",", "%2C"))
+
+
+def _escape_cursor(value: str) -> str:
+    for raw, encoded in _CURSOR_ESCAPES:
+        value = value.replace(raw, encoded)
+    return value
+
+
+def _unescape_cursor(value: str) -> str:
+    for raw, encoded in reversed(_CURSOR_ESCAPES):
+        value = value.replace(encoded, raw)
+    return value
+
+
+def encode_multi_cursor(cursors: dict[str, str]) -> str:
+    """Aggregated cursor wire format: ``ms1.name:cursor,name:cursor`` (sorted).
+
+    Shell-safe by construction: plugin names are registry-validated and
+    cursor values are escaped, so the token never needs nested quoting.
+    """
+    body = ",".join(f"{name}:{_escape_cursor(value)}" for name, value in sorted(cursors.items()))
+    return _MULTI_CURSOR_PREFIX + body
+
+
+def decode_multi_cursor(cursor: str) -> dict[str, str]:
+    """Parse an ``ms1.`` token; legacy JSON ``{source: cursor}`` objects still work."""
+    if cursor.startswith(_MULTI_CURSOR_PREFIX):
+        body = cursor[len(_MULTI_CURSOR_PREFIX) :]
+        if not body:
+            raise UsageError("Multi-source cursor has no entries after the 'ms1.' prefix.")
+        cursors: dict[str, str] = {}
+        for segment in body.split(","):
+            name, sep, value = segment.partition(":")
+            if not sep or not name or not value:
+                raise UsageError(f"Malformed multi-source cursor segment: {segment!r}.")
+            cursors[name] = _unescape_cursor(value)
+        return cursors
+    try:
+        decoded = json.loads(cursor)
+    except ValueError as exc:
+        raise UsageError(
+            "Multi-source cursor must be the 'ms1.' next_cursor from a previous "
+            "multi-source page (a legacy JSON object is also accepted)."
+        ) from exc
+    if not isinstance(decoded, dict):
+        raise UsageError("Multi-source cursor must be an 'ms1.' token or a JSON object.")
+    return {str(k): str(v) for k, v in decoded.items()}
+
 
 class SearchService:
     def __init__(
@@ -110,22 +162,14 @@ class SearchService:
         ``limit`` caps each source's request only; the deduped merge is
         returned in full (a page may exceed ``limit``).
 
-        The aggregated cursor is a JSON object {source: next_cursor}; sources
-        absent from it are exhausted. Dedup is per page (stateless across pages).
-        ``total`` is the pre-dedup sum of per-source totals (approximate).
+        The aggregated cursor is an escape-free ``ms1.name:cursor,...`` token;
+        sources absent from it are exhausted. Dedup is per page (stateless
+        across pages). ``total`` is the pre-dedup sum of per-source totals
+        (approximate).
         """
         cursors: dict[str, str] = {}
         if cursor is not None:
-            try:
-                decoded = json.loads(cursor)
-            except ValueError as exc:
-                raise UsageError(
-                    "Multi-source cursor must be the JSON next_cursor from a previous "
-                    "multi-source page."
-                ) from exc
-            if not isinstance(decoded, dict):
-                raise UsageError("Multi-source cursor must be a JSON object.")
-            cursors = {str(k): str(v) for k, v in decoded.items()}
+            cursors = decode_multi_cursor(cursor)
         active = [(name, s) for name, s in searchers if cursor is None or name in cursors]
         names = ",".join(name for name, _ in searchers)
         if not active:
@@ -176,7 +220,7 @@ class SearchService:
         page = SearchPage(
             items=merged,
             total=total,
-            next_cursor=json.dumps(next_cursors, sort_keys=True) if next_cursors else None,
+            next_cursor=encode_multi_cursor(next_cursors) if next_cursors else None,
             source=names,
         )
         return page, warnings

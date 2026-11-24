@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import builtins
 import logging
+import re
 from dataclasses import dataclass
 from importlib.metadata import entry_points
 from typing import Any, Protocol
@@ -95,6 +96,10 @@ _REQUIRED_ATTRS: dict[str, tuple[str, ...]] = {
 
 
 class PluginRegistry:
+    # Plugin names double as multi-source cursor segment keys (see
+    # services.encode_multi_cursor), so they must avoid the : , % separators.
+    _NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+
     def __init__(self, ctx: PluginContext) -> None:
         self.ctx = ctx
         self._plugins: dict[str, dict[str, Any]] = {role: {} for role in ROLE_GROUPS}
@@ -111,6 +116,11 @@ class PluginRegistry:
         meta = plugin.meta
         if not isinstance(meta, PluginMeta):
             raise PluginError(f"{role} plugin has invalid meta (expected PluginMeta)")
+        if not self._NAME_RE.fullmatch(meta.name):
+            raise PluginError(
+                f"{role} plugin name {meta.name!r} must match {self._NAME_RE.pattern!r} "
+                "(alphanumeric start; then letters, digits, dot, underscore, hyphen)"
+            )
         if meta.name in self._plugins[role]:
             message = f"plugin {meta.name!r} ({role}) overrides an earlier registration"
             logger.warning(message)

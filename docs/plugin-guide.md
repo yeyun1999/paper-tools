@@ -44,6 +44,8 @@ paper-tools sources --json              # 自动出现你的源
 所有插件构造函数接收 `PluginContext(config, http, cache)`，并声明类属性
 `meta = PluginMeta(name, version, description)`。接口定义见
 [src/paper_tools/core/plugins.py](../src/paper_tools/core/plugins.py)。
+`name` 必须匹配 `[A-Za-z0-9][A-Za-z0-9._-]*`（用作多源聚合游标的段键，不能含
+`:` `,` `%` 或空白），不合规的注册抛 `PluginError`。
 
 ### Searcher
 

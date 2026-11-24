@@ -353,7 +353,7 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 2. **多源并发**：多个源用线程池并发检索（各源独立 limit），失败源降级为 `warnings`，全部失败抛 `UpstreamError`（退出码 3）。
 3. **去重合并**：主键 DOI → 兜底 PMID → 再兜底规范化标题指纹；重复条目走 `merge_papers`（fill-missing、identifiers 并集、sources 记录贡献源、冲突告警）。去重仅在**页内**（跨页无状态）。
 4. **排序**：各源相关性分数不可比，按源顺序轮转交错（round-robin）输出；`--limit` 只约束各源返回量，合并去重后不再截断（单页可超过 limit）；`total` 为各源 total 之和（去重前，近似值）。
-5. **聚合游标**：`next_cursor` 为 JSON 对象 `{source: cursor}`；续传时不在对象中的源视为耗尽。失败但持有旧游标的源保留进度以便重试。单源游标仍是不透明字符串。
+5. **聚合游标**：`next_cursor` 为免转义 token `ms1.<源名>:<游标>,...`（键按字典序；游标段对 `% : ,` 最小百分号转义，源名经注册时字符合约校验，命令行整体加引号即可）；续传时不在 token 中的源视为耗尽。失败但持有旧游标的源保留进度以便重试。输入兼容旧版 JSON 对象 `{source: cursor}`（手工构造子集游标仍可用）。单源游标仍是不透明字符串。
 
 ### 8.2 MetadataService（补全链）
 
@@ -377,7 +377,7 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 
 | 命令 | 功能 | 关键选项 |
 |---|---|---|
-| `search QUERY` | 检索（返回浅记录） | `--source`（可重复/逗号分隔/`all`，多源并发+去重；默认 `general.default_source`）、`--limit`、`--cursor`（多源时为 JSON 聚合游标）、`--author`、`--journal`、`--year-from/--year-to`、`--oa-only`、`--raw`、`--fields`、`--enrich`（走补全链） |
+| `search QUERY` | 检索（返回浅记录） | `--source`（可重复/逗号分隔/`all`，多源并发+去重；默认 `general.default_source`）、`--limit`、`--cursor`（多源为 `ms1.` 聚合游标，兼容 JSON）、`--author`、`--journal`、`--year-from/--year-to`、`--oa-only`、`--raw`、`--fields`、`--enrich`（走补全链） |
 | `get ID...` | 按标识符取完整元数据（stub → 补全链），支持多个 ID 批量 | `--source`（可选，限定补全来源）、`--fields`；批量 `--json` 为 NDJSON，逐 ID 错误进 stdout 结果流，退出码取首个失败 |
 | `fetch ID...` | 获取全文，支持多个 ID | `--format pdf\|xml\|text`、`--out DIR`、`--locator`（可重复指定或逗号分隔，限定定位器；`all` 强制全部；默认取 `fetch.locators` 配置，空则全部）、`--downloader`（强制指定）、`--extractor`（text 时强制指定） |
 | `sources` | 列出全部已注册插件（按五类角色分组）与关键属性 | |

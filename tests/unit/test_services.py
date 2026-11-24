@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -326,22 +325,37 @@ def test_multi_source_cursor_roundtrip(services: Services) -> None:
     services.registry.register("searcher", sa)
     services.registry.register("searcher", sb)
     page, _ = services.search.search(Query(text="q"), sources=["sa", "sb"])
-    assert page.next_cursor is not None
-    assert json.loads(page.next_cursor) == {"sa": "a1", "sb": "b1"}
+    assert page.next_cursor == "ms1.sa:a1,sb:b1"
     services.search.search(Query(text="q"), sources=["sa", "sb"], cursor=page.next_cursor)
     assert sa.calls[-1] == "a1"
     assert sb.calls[-1] == "b1"
     # a source absent from the aggregated cursor is exhausted and not queried
-    services.search.search(Query(text="q"), sources=["sa", "sb"], cursor='{"sa": "a2"}')
+    services.search.search(Query(text="q"), sources=["sa", "sb"], cursor="ms1.sa:a2")
     assert sa.calls[-1] == "a2"
     assert sb.calls[-1] == "b1"  # unchanged
+    # legacy JSON object cursors are still accepted
+    services.search.search(Query(text="q"), sources=["sa", "sb"], cursor='{"sa": "a3"}')
+    assert sa.calls[-1] == "a3"
+    assert sb.calls[-1] == "b1"
+
+
+def test_multi_source_cursor_escapes_separators(services: Services) -> None:
+    nasty = "we:ir,cu%3A%rsor"  # contains every reserved char plus a fake escape
+    sa = StubSearcher("sa", [Paper(title="A", identifiers={"doi": "10.1000/x"})], next_cursor=nasty)
+    services.registry.register("searcher", sa)
+    services.registry.register("searcher", StubSearcher("sb", []))
+    page, _ = services.search.search(Query(text="q"), sources=["sa", "sb"])
+    assert page.next_cursor == "ms1.sa:we%3Air%2Ccu%253A%25rsor"  # sb has no cursor -> absent
+    services.search.search(Query(text="q"), sources=["sa", "sb"], cursor=page.next_cursor)
+    assert sa.calls[-1] == nasty  # decoded back to the upstream opaque string
 
 
 def test_multi_source_invalid_cursor(services: Services) -> None:
     services.registry.register("searcher", StubSearcher("sa", []))
     services.registry.register("searcher", StubSearcher("sb", []))
-    with pytest.raises(UsageError):
-        services.search.search(Query(text="q"), sources=["sa", "sb"], cursor="plain-opaque")
+    for bad in ("plain-opaque", "ms1.", "ms1.nocolon", "ms1.:x", "ms1.sa:", "[1,2]"):
+        with pytest.raises(UsageError):
+            services.search.search(Query(text="q"), sources=["sa", "sb"], cursor=bad)
 
 
 def test_single_source_cursor_stays_opaque(services: Services) -> None:

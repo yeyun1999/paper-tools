@@ -102,7 +102,13 @@ def build_server(opts: GlobalOpts | None = None) -> MCPServer[Any]:
             ),
         ] = 20,
         cursor: Annotated[
-            str | None, Field(description="Pagination cursor from next_cursor.")
+            str | None,
+            Field(
+                description=(
+                    "Pagination cursor from a previous data.next_cursor (multi-source: "
+                    "'ms1.' token, pass back verbatim; legacy JSON object also accepted)."
+                )
+            ),
         ] = None,
         author: Annotated[str | None, Field(description="Author name filter.")] = None,
         journal: Annotated[str | None, Field(description="Journal name filter.")] = None,

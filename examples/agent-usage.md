@@ -58,7 +58,7 @@ Paper 的 `fulltext_links` 字段（schema 1.1）在搜索/补全期就捕获源
 uv run paper-tools fetch pmcid:PMC13434336 --format text --out papers/ --json
 uv run paper-tools fetch doi:10.1093/nar/gkag769 --format pdf --json
 
-# 分页：取 next_cursor 续传（多源时 next_cursor 是 JSON 聚合游标，原样回传即可；
+# 分页：取 next_cursor 原样回传续传（多源时 next_cursor 是免转义的 'ms1.' 聚合游标；
 # 单源游标是不透明字符串。多源 total 为去重前各源之和，近似值）
 uv run paper-tools search "CRISPR" --limit 20 --json          # data.next_cursor
 uv run paper-tools search "CRISPR" --limit 20 --cursor "<next_cursor>" --json

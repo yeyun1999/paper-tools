@@ -52,7 +52,13 @@ def register(app: typer.Typer) -> None:
         ] = 20,
         cursor: Annotated[
             str | None,
-            typer.Option("--cursor", help="Pagination cursor from a previous data.next_cursor."),
+            typer.Option(
+                "--cursor",
+                help=(
+                    "Pagination cursor from a previous data.next_cursor "
+                    "(multi-source: 'ms1.' token, no quoting needed; legacy JSON accepted)."
+                ),
+            ),
         ] = None,
         author: Annotated[str | None, typer.Option("--author", help="Author name filter.")] = None,
         journal: Annotated[

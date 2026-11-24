@@ -33,6 +33,15 @@ def test_register_invalid_plugin(plugin_ctx: PluginContext) -> None:
         registry.register("searcher", broken)
 
 
+def test_register_rejects_cursor_unsafe_names(plugin_ctx: PluginContext) -> None:
+    registry = PluginRegistry(plugin_ctx)
+    for bad_name in ("bad:name", "bad,name", "bad%d", "bad name", "-lead", ""):
+        searcher = FakeSearcher()
+        searcher.meta = PluginMeta(name=bad_name, version="0.1.0")
+        with pytest.raises(PluginError, match="plugin name"):
+            registry.register("searcher", searcher)
+
+
 def test_unknown_role(plugin_ctx: PluginContext) -> None:
     registry = PluginRegistry(plugin_ctx)
     with pytest.raises(PluginError):
