@@ -1,9 +1,8 @@
-"""Schema 1.0 freeze: snapshot gate for the machine-readable JSON contract.
+"""Schema contract freeze: snapshot gate for the machine-readable JSON contract.
 
 Any change to model fields, envelope structure, or schema_version fails this
 suite. If a change is intentional: regenerate the snapshot, record it in
-CHANGELOG, and treat it as a breaking change (bump schema_version) now that
-1.0 is frozen.
+CHANGELOG, and treat it as a breaking change (bump schema_version).
 
 Regenerate: uv run python -c "from tests.test_schema_snapshot import write_snapshot as w; w()"
 """
@@ -46,7 +45,7 @@ def test_contract_snapshot_matches() -> None:
     expected = json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))
     actual = json.loads(json.dumps(current_snapshot(), sort_keys=True))
     assert actual == expected, (
-        "JSON contract changed against the frozen 1.0 snapshot. "
+        "JSON contract changed against the frozen schema snapshot. "
         "If intentional: update CHANGELOG, bump schema_version, and regenerate "
         "tests/snapshots/schema_v1.json (see module docstring)."
     )

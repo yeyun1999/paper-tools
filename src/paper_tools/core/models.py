@@ -126,6 +126,29 @@ class Artifact(BaseModel):
     license: str | None = None
 
 
+class FullTextLinks(BaseModel):
+    paper: Paper
+    candidates: list[FullTextCandidate]
+
+
+class DownloadedFullText(BaseModel):
+    source_url: str
+    format: ArtifactFormat
+    path: Path
+    sha256: str
+    downloader: str
+    license: str | None = None
+
+
+class ExtractedFullText(BaseModel):
+    source_path: Path
+    source_format: Literal["pdf", "xml"]
+    format: Literal["text"] = "text"
+    path: Path
+    sha256: str
+    extractor: str
+
+
 class FullText(BaseModel):
     paper: Paper
     format: ArtifactFormat

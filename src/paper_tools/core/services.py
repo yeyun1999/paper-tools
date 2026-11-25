@@ -9,7 +9,8 @@ import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
+from urllib.parse import urlparse
 
 from defusedxml.common import DefusedXmlException
 from defusedxml.ElementTree import fromstring as safe_xml_fromstring
@@ -28,8 +29,11 @@ from paper_tools.core.models import (
     SCHEMA_VERSION,
     Artifact,
     ArtifactFormat,
+    DownloadedFullText,
+    ExtractedFullText,
     FullText,
     FullTextCandidate,
+    FullTextLinks,
     Paper,
     SearchPage,
     is_complete,
@@ -353,6 +357,33 @@ class FetchService:
         self._cache = cache
         self._metadata = metadata
 
+    def _locate(
+        self, identifier: str, locators: list[str] | None
+    ) -> tuple[Paper, list[FullTextCandidate], list[str]]:
+        ident = parse_identifier(identifier)
+        stub = Paper(identifiers={ident.kind: ident.value})
+        paper, warnings = self._metadata.enrich(stub)
+        return paper, self._collect_candidates(paper, locators, warnings), warnings
+
+    def locate(
+        self,
+        identifier: str,
+        *,
+        fmt: ArtifactFormat | None = None,
+        locators: list[str] | None = None,
+    ) -> tuple[FullTextLinks, list[str]]:
+        paper, candidates, warnings = self._locate(identifier, locators)
+        if fmt is not None:
+            candidates = [
+                candidate
+                for candidate in candidates
+                if candidate.format != "landing" and self._format_compatible(candidate, fmt)
+            ]
+        return (
+            FullTextLinks(paper=paper, candidates=self._rank(candidates, fmt or "pdf")),
+            warnings,
+        )
+
     def fetch(
         self,
         identifier: str,
@@ -363,14 +394,13 @@ class FetchService:
         downloader: str | None = None,
         extractor: str | None = None,
     ) -> tuple[FullText, list[str]]:
-        ident = parse_identifier(identifier)
         output_path, artifact_format = self._resolve_output(fmt, output)
-        stub = Paper(identifiers={ident.kind: ident.value})
-        paper, warnings = self._metadata.enrich(stub)
+        paper, candidates, warnings = self._locate(identifier, locators)
         if output_path is None:
-            output_path = self._default_output(paper, artifact_format, ident.value)
+            output_path = self._default_output(
+                paper, artifact_format, parse_identifier(identifier).value
+            )
 
-        candidates = self._collect_candidates(paper, locators, warnings)
         attempts: list[str] = []
         for candidate in self._rank(candidates, artifact_format):
             if not self._format_compatible(candidate, artifact_format):
@@ -401,6 +431,110 @@ class FetchService:
             publisher_url=paper.publisher_url or landing_url,
             attempts=attempts,
         )
+
+    def download(
+        self,
+        url: str,
+        *,
+        fmt: ArtifactFormat | None = None,
+        output: Path | None = None,
+        downloader: str | None = None,
+    ) -> tuple[DownloadedFullText, list[str]]:
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise UsageError(f"Expected an HTTP(S) full-text URL, got {url!r}.")
+        if fmt is None and output is not None:
+            fmt = _OUTPUT_EXTENSIONS.get(output.suffix.lower())
+        if fmt is None:
+            fmt = _OUTPUT_EXTENSIONS.get(Path(parsed.path).suffix.lower())
+        if output is None:
+            if fmt is None:
+                raise UsageError(
+                    "Cannot infer the download format from the URL; "
+                    "specify --format pdf, xml, or text."
+                )
+            stem = Path(parsed.path).stem or "fulltext"
+            output = Path(f"{_filename_slug(stem)}{_FORMAT_EXTENSIONS[fmt]}")
+        output_path, artifact_format = self._resolve_output(fmt, output)
+        output_path = cast(Path, output_path)
+        candidate = FullTextCandidate(url=url, format=artifact_format, locator="user")
+        attempts: list[str] = []
+        artifact = self._download(candidate, downloader, attempts)
+        if artifact is None:
+            raise UpstreamError(
+                "All downloaders failed for the full-text URL.",
+                url=url,
+                attempts=attempts,
+            )
+        self._validate(artifact)
+        digest = self._store_output(artifact.content, artifact.format, output_path)
+        self._cache.set(
+            f"file:{candidate.url}:{artifact_format}",
+            {
+                "sha256": digest,
+                "ext": artifact.format,
+                "artifact_format": artifact_format,
+                "extractor": None,
+                "extracted_from": None,
+            },
+            ttl=_FILEMAP_TTL,
+        )
+        return (
+            DownloadedFullText(
+                source_url=url,
+                format=artifact_format,
+                path=output_path,
+                sha256=digest,
+                downloader=artifact.downloader,
+                license=artifact.license,
+            ),
+            attempts,
+        )
+
+    def extract(
+        self,
+        source: Path,
+        *,
+        output: Path | None = None,
+        extractor: str | None = None,
+    ) -> tuple[ExtractedFullText, list[str]]:
+        if not source.is_file():
+            raise UsageError(f"Input file not found: {source}")
+        source_format = _OUTPUT_EXTENSIONS.get(source.suffix.lower())
+        if source_format not in {"pdf", "xml"}:
+            raise UsageError(
+                f"Unsupported input extension {source.suffix!r}; expected .pdf or .xml."
+            )
+        output_path, _ = self._resolve_output("text", output or source.with_suffix(".txt"))
+        output_path = cast(Path, output_path)
+        artifact = Artifact(
+            format=cast(ArtifactFormat, source_format),
+            content=source.read_bytes(),
+            source_url=source.resolve().as_uri(),
+            downloader="local",
+        )
+        self._validate(artifact)
+        warnings: list[str] = []
+        data, ext, extractor_name, extracted_from = self._extract_text(
+            artifact, extractor, warnings
+        )
+        digest = self._store_output(data, ext, output_path)
+        return (
+            ExtractedFullText(
+                source_path=source,
+                source_format=extracted_from,
+                path=output_path,
+                sha256=digest,
+                extractor=extractor_name,
+            ),
+            warnings,
+        )
+
+    def _store_output(self, data: bytes, ext: str, output_path: Path) -> str:
+        _, digest = self._cache.store_file(data, ext)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(data)
+        return digest
 
     def _resolve_output(
         self, fmt: ArtifactFormat | None, output: Path | None
@@ -585,6 +719,25 @@ class FetchService:
         preferred = _PREFERRED_EXTRACTORS.get(source_format)
         return sorted(available, key=lambda e: e.meta.name != preferred)[0]
 
+    def _extract_text(
+        self,
+        artifact: Artifact,
+        extractor_name: str | None,
+        warnings: list[str],
+    ) -> tuple[bytes, str, str, Literal["pdf", "xml"]]:
+        extractor = self._pick_extractor(artifact.format, extractor_name)
+        text = extractor.extract(artifact.content, source_format=artifact.format)
+        if not text.strip():
+            raise UpstreamError("Extractor produced empty text", url=artifact.source_url)
+        if extractor.meta.name == "pypdf":
+            warnings.append("text extracted from PDF by pypdf; quality may be limited")
+        return (
+            text.encode("utf-8"),
+            "txt",
+            extractor.meta.name,
+            cast(Literal["pdf", "xml"], artifact.format),
+        )
+
     def _finalize(
         self,
         paper: Paper,
@@ -606,19 +759,14 @@ class FetchService:
             extractor_used = mapping.get("extractor")
             extracted_from = mapping.get("extracted_from")
         elif fmt == "text" and artifact.format in {"pdf", "xml"}:
-            extractor = self._pick_extractor(artifact.format, extractor_name)
-            text = extractor.extract(artifact.content, source_format=artifact.format)
-            data = text.encode("utf-8")
-            ext = "txt"
-            extractor_used = extractor.meta.name
-            extracted_from = artifact.format
-            if extractor_used == "pypdf":
-                warnings.append("text extracted from PDF by pypdf; quality may be limited")
+            data, ext, extractor_used, extracted_from = self._extract_text(
+                artifact, extractor_name, warnings
+            )
         else:
             data = artifact.content
             ext = artifact.format
 
-        _, digest = self._cache.store_file(data, ext)
+        digest = self._store_output(data, ext, output_path)
         self._cache.set(
             f"file:{candidate.url}:{fmt}",
             {
@@ -630,8 +778,6 @@ class FetchService:
             },
             ttl=_FILEMAP_TTL,
         )
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_bytes(data)
         return FullText(
             paper=paper,
             format=fmt,

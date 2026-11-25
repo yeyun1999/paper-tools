@@ -12,8 +12,11 @@ from paper_tools.core.errors import UsageError
 from paper_tools.core.models import (
     Artifact,
     Author,
+    DownloadedFullText,
+    ExtractedFullText,
     FullText,
     FullTextCandidate,
+    FullTextLinks,
     Identifier,
     Paper,
     SearchPage,
@@ -28,12 +31,18 @@ _MODELS: dict[str, type[BaseModel]] = {
     "SearchPage": SearchPage,
     "FullTextCandidate": FullTextCandidate,
     "Artifact": Artifact,
+    "FullTextLinks": FullTextLinks,
+    "DownloadedFullText": DownloadedFullText,
+    "ExtractedFullText": ExtractedFullText,
     "FullText": FullText,
 }
 
 _COMMAND_MODELS: dict[str, tuple[str, ...]] = {
     "search": ("Query", "SearchPage"),
     "get": ("Paper",),
+    "locate": ("FullTextLinks",),
+    "download": ("DownloadedFullText",),
+    "extract": ("ExtractedFullText",),
     "fetch": ("FullText",),
 }
 
@@ -44,7 +53,12 @@ def register(app: typer.Typer) -> None:
         ctx: typer.Context,
         command: Annotated[
             str | None,
-            typer.Argument(help="Limit to one command's models (search/get/fetch); omit for all."),
+            typer.Argument(
+                help=(
+                    "Limit to one command's models "
+                    "(search/get/locate/download/extract/fetch); omit for all."
+                )
+            ),
         ] = None,
     ) -> None:
         """Print JSON Schemas (always JSON, regardless of --json)."""

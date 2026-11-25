@@ -19,12 +19,17 @@ uv run paper-tools search "CRISPR base editing" --source pubmed --limit 10
 uv run paper-tools search "CRISPR base editing" --source europepmc --enrich
 uv run paper-tools search "CRISPR base editing" --source crossref --limit 5
 uv run paper-tools get pmid:38308006 --json          # AI 助理：稳定 JSON 输出
-uv run paper-tools fetch pmcid:PMC13434336 --output title.txt   # OA 全文 → 纯文本
+uv run paper-tools locate pmcid:PMC13434336 --json  # 只定位全文链接，不下载
+uv run paper-tools download "$FULLTEXT_URL" --output title.pdf
+uv run paper-tools extract title.pdf --output title.txt # 本地 PDF/JATS XML → 纯文本
+uv run paper-tools fetch pmcid:PMC13434336 --output title.txt   # 一键：定位 → 下载 → 提取
 uv run paper-tools fetch doi:10.1093/nar/gkag769 --format pdf
 uv run paper-tools sources                            # 查看已注册插件
 ```
 
-`fetch` 每次只接受一个文献标识符；需要获取多篇全文时请逐篇调用。`get` 仍支持多 ID 批量查询。全文默认使用安全化的文章标题作为文件名并保存到当前目录，重名时追加 DOI/PMID 等 ID；可用 `--output FILE` 指定固定文件名，未指定 `--format` 时按 `.pdf` / `.xml` / `.txt` 扩展名推断格式。
+`fetch` 每次只接受一个文献标识符，仍是一键流程；需要控制处理阶段时，可依次使用 `locate`（定位链接）、`download`（下载直链）和 `extract`（提取纯文本）。`get` 支持多 ID 批量查询。`fetch` 全文默认使用安全化的文章标题作为文件名并保存到当前目录，重名时追加 DOI/PMID 等 ID；可用 `--output FILE` 指定固定文件名，未指定 `--format` 时按 `.pdf` / `.xml` / `.txt` 扩展名推断格式。
+
+`download` 未指定格式时依次按 `--output` 扩展名和 URL 路径推断；未提供 `--output` 且 URL 无法识别时必须提供 `--format`，显式无扩展名的 `--output` 默认 PDF。默认文件名取自 URL。`extract` 只支持 PDF/JATS XML → text，默认把输入文件同目录的同名文件改为 `.txt`，也可用 `--output` 指定位置。三个新命令同样支持 `--json`，并返回各自的结果模型。
 
 AI 助理除 `--json` CLI 外，还可挂载 MCP 服务器（stdio，四个工具与 CLI 契约一致）：
 

@@ -1,6 +1,6 @@
 # AI 助理使用指南（agent-usage）
 
-paper-tools 为 AI 助理提供两条通道，契约完全一致（`schema_version 1.1`）：
+paper-tools 为 AI 助理提供两条通道，共享 success/error envelope 契约（`schema_version 1.1`）：
 
 1. **JSON CLI**：任意 shell 调用 `paper-tools ... --json`，按退出码分支。
 2. **MCP 服务器**：`paper-tools mcp`（stdio），四个工具，返回同样的 envelope。
@@ -54,10 +54,15 @@ Paper 的 `fulltext_links` 字段（schema 1.1）在搜索/补全期就捕获源
 `fetch` 也会把这些链接并入候选池。
 
 ```bash
-# OA 全文：pdf / xml / text（text 走 下载→提取 流水线，优先 XML）
+# 一键 OA 全文：pdf / xml / text（text 走 下载→提取 流水线，优先 XML）
 uv run paper-tools fetch pmcid:PMC13434336 --output papers/paper.txt --json
 uv run paper-tools fetch doi:10.1093/nar/gkag769 --format pdf --json
 # 未指定 --output：当前目录使用安全化文章标题；重名追加 DOI/PMID 等 ID
+
+# 分阶段执行：定位链接 → 下载直链 → 转换本地文件
+uv run paper-tools locate pmcid:PMC13434336 --format xml --json
+uv run paper-tools download "$FULLTEXT_URL" --output papers/paper.xml --json
+uv run paper-tools extract papers/paper.xml --output papers/paper.txt --json
 
 # 分页：取 next_cursor 原样回传续传（多源时 next_cursor 是免转义的 'ms1.' 聚合游标；
 # 单源游标是不透明字符串。多源 total 为去重前各源之和，近似值）
@@ -66,6 +71,9 @@ uv run paper-tools search "CRISPR" --limit 20 --cursor "<next_cursor>" --json
 
 # 能力发现与契约
 uv run paper-tools sources --json        # 五角色全部插件（检索/元数据/定位/下载/提取）
+uv run paper-tools schema locate        # FullTextLinks 的 JSON Schema
+uv run paper-tools schema download       # DownloadedFullText 的 JSON Schema
+uv run paper-tools schema extract        # ExtractedFullText 的 JSON Schema
 uv run paper-tools schema fetch          # FullText 的 JSON Schema
 ```
 
@@ -92,7 +100,7 @@ uv run paper-tools schema fetch          # FullText 的 JSON Schema
 | 4 | FULLTEXT_UNAVAILABLE | 无 OA 全文 | 把 details.publisher_url 给用户，走机构权限；**不要尝试绕过付费墙** |
 | 5 | CONFIG | 配置缺失 | 按 error.message 提示执行 `config set`（如 unpaywall email） |
 
-进程级错误的 error envelope 在 **stderr**；`fetch` / `get` 的逐文献错误作为结果信封写在 **stdout**（单篇为单个 JSON 对象，批量 `get` 为 NDJSON 中的一行）。
+进程级错误的 error envelope 在 **stderr**；`locate` / `download` / `extract` / `fetch` / `get` 的单篇错误作为结果信封写在 **stdout**（单篇为单个 JSON 对象，批量 `get` 为 NDJSON 中的一行）。
 
 ```bash
 uv run paper-tools fetch doi:10.1001/jama.2020.2648 --format pdf --json
@@ -169,7 +177,7 @@ uv sync --extra mcp
 | `fetch_fulltext` | identifier, format(可选 pdf\|xml\|text), output(文件名), locator（逗号分隔多个）/downloader/extractor | FullText（含本地路径） |
 | `list_sources` | — | 五角色插件清单 |
 
-与 CLI 的唯一差异：MCP 工具把业务错误作为 **error envelope 返回值**（不抛异常、无退出码），agent 检查返回对象是否含 `error` 键即可，分支逻辑与第 2 节表格相同。
+与 CLI 的差异：MCP 当前只暴露检索、元数据和一键全文工具；`locate` / `download` / `extract` 分阶段能力通过 JSON CLI 使用。MCP 工具把业务错误作为 **error envelope 返回值**（不抛异常、无退出码），agent 检查返回对象是否含 `error` 键即可，分支逻辑与第 2 节表格相同。
 
 推荐流程：`search_papers`（浅记录）→ 选中后 `get_paper`（完整元数据）→ 需要全文时 `fetch_fulltext format=text`（AI 阅读友好，优先 XML 提取）。
 

@@ -92,6 +92,102 @@
       "title": "Author",
       "type": "object"
     },
+    "DownloadedFullText": {
+      "properties": {
+        "downloader": {
+          "title": "Downloader",
+          "type": "string"
+        },
+        "format": {
+          "enum": [
+            "pdf",
+            "xml",
+            "text"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "license": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "License"
+        },
+        "path": {
+          "format": "path",
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        },
+        "source_url": {
+          "title": "Source Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_url",
+        "format",
+        "path",
+        "sha256",
+        "downloader"
+      ],
+      "title": "DownloadedFullText",
+      "type": "object"
+    },
+    "ExtractedFullText": {
+      "properties": {
+        "extractor": {
+          "title": "Extractor",
+          "type": "string"
+        },
+        "format": {
+          "const": "text",
+          "default": "text",
+          "title": "Format",
+          "type": "string"
+        },
+        "path": {
+          "format": "path",
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        },
+        "source_format": {
+          "enum": [
+            "pdf",
+            "xml"
+          ],
+          "title": "Source Format",
+          "type": "string"
+        },
+        "source_path": {
+          "format": "path",
+          "title": "Source Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_path",
+        "source_format",
+        "path",
+        "sha256",
+        "extractor"
+      ],
+      "title": "ExtractedFullText",
+      "type": "object"
+    },
     "FullText": {
       "$defs": {
         "Author": {
@@ -418,6 +514,230 @@
         "locator"
       ],
       "title": "FullTextCandidate",
+      "type": "object"
+    },
+    "FullTextLinks": {
+      "$defs": {
+        "Author": {
+          "properties": {
+            "affiliation": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Affiliation"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "orcid": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Orcid"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "title": "Author",
+          "type": "object"
+        },
+        "FullTextCandidate": {
+          "properties": {
+            "format": {
+              "enum": [
+                "pdf",
+                "xml",
+                "text",
+                "landing"
+              ],
+              "title": "Format",
+              "type": "string"
+            },
+            "license": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "License"
+            },
+            "locator": {
+              "title": "Locator",
+              "type": "string"
+            },
+            "url": {
+              "title": "Url",
+              "type": "string"
+            }
+          },
+          "required": [
+            "url",
+            "format",
+            "locator"
+          ],
+          "title": "FullTextCandidate",
+          "type": "object"
+        },
+        "Paper": {
+          "properties": {
+            "abstract": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Abstract"
+            },
+            "authors": {
+              "items": {
+                "$ref": "#/$defs/Author"
+              },
+              "title": "Authors",
+              "type": "array"
+            },
+            "fulltext_links": {
+              "items": {
+                "$ref": "#/$defs/FullTextCandidate"
+              },
+              "title": "Fulltext Links",
+              "type": "array"
+            },
+            "identifiers": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "title": "Identifiers",
+              "type": "object"
+            },
+            "journal": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Journal"
+            },
+            "license": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "License"
+            },
+            "oa_status": {
+              "default": "unknown",
+              "enum": [
+                "gold",
+                "green",
+                "hybrid",
+                "bronze",
+                "closed",
+                "unknown"
+              ],
+              "title": "Oa Status",
+              "type": "string"
+            },
+            "publication_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Publication Type"
+            },
+            "publisher_url": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Publisher Url"
+            },
+            "sources": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Sources",
+              "type": "array"
+            },
+            "title": {
+              "default": "",
+              "title": "Title",
+              "type": "string"
+            },
+            "year": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Year"
+            }
+          },
+          "title": "Paper",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "candidates": {
+          "items": {
+            "$ref": "#/$defs/FullTextCandidate"
+          },
+          "title": "Candidates",
+          "type": "array"
+        },
+        "paper": {
+          "$ref": "#/$defs/Paper"
+        }
+      },
+      "required": [
+        "paper",
+        "candidates"
+      ],
+      "title": "FullTextLinks",
       "type": "object"
     },
     "Identifier": {

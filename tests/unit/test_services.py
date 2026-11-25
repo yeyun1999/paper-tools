@@ -17,6 +17,7 @@ from paper_tools.core.models import ArtifactFormat, FullTextCandidate, Paper, Se
 from paper_tools.core.plugins import PluginMeta
 from paper_tools.core.query import Query
 from paper_tools.core.services import Services
+from tests.conftest import PDF_BYTES, XML_BYTES
 
 
 def test_search_default_source(services: Services) -> None:
@@ -363,6 +364,129 @@ def test_fetch_locators_default_from_config(services: Services, tmp_path: Path) 
 def test_fetch_unknown_locator_usage_error(services: Services, tmp_path: Path) -> None:
     with pytest.raises(UsageError):
         services.fetch.fetch("doi:10.1000/fake1", output=tmp_path / "paper.pdf", locators=["nope"])
+
+
+def test_locate_returns_ranked_candidates(services: Services) -> None:
+    result, warnings = services.fetch.locate("doi:10.1000/fake1")
+    assert warnings == []
+    assert result.paper.title == "CRISPR base editing review"
+    assert [candidate.format for candidate in result.candidates] == ["pdf", "xml", "landing"]
+    assert result.candidates[0].url == "https://example.org/paper.pdf"
+
+
+def test_locate_filters_formats(services: Services) -> None:
+    xml, _ = services.fetch.locate("doi:10.1000/fake1", fmt="xml")
+    assert [candidate.format for candidate in xml.candidates] == ["xml"]
+    text, _ = services.fetch.locate("doi:10.1000/fake1", fmt="text")
+    assert [candidate.format for candidate in text.candidates] == ["xml", "pdf"]
+
+
+def test_locate_closed_keeps_landing_page(services: Services) -> None:
+    result, _ = services.fetch.locate("doi:10.1000/closed")
+    assert [candidate.format for candidate in result.candidates] == ["landing"]
+    filtered, _ = services.fetch.locate("doi:10.1000/closed", fmt="pdf")
+    assert filtered.candidates == []
+
+
+def test_download_pdf(services: Services, tmp_path: Path) -> None:
+    output = tmp_path / "paper.pdf"
+    result, warnings = services.fetch.download("https://example.org/paper.pdf", output=output)
+    assert warnings == []
+    assert result.format == "pdf"
+    assert result.path == output
+    assert result.source_url == "https://example.org/paper.pdf"
+    assert result.downloader == "fake_dl"
+    assert output.read_bytes() == PDF_BYTES
+
+
+def test_download_infers_format_from_output(services: Services, tmp_path: Path) -> None:
+    output = tmp_path / "paper.xml"
+    result, _ = services.fetch.download("https://example.org/fulltext", output=output)
+    assert result.format == "xml"
+    assert output.read_bytes() == XML_BYTES
+
+
+def test_download_default_output(
+    services: Services, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    result, _ = services.fetch.download("https://example.org/papers/paper.pdf?token=abc")
+    assert result.path == Path("paper.pdf")
+    assert result.path.exists()
+
+
+def test_download_requires_format_for_unknown_extension(services: Services) -> None:
+    with pytest.raises(UsageError, match="Cannot infer"):
+        services.fetch.download("https://example.org/fulltext")
+
+
+def test_download_rejects_non_http_url(services: Services) -> None:
+    with pytest.raises(UsageError, match="HTTP"):
+        services.fetch.download("file:///tmp/paper.pdf")
+
+
+def test_download_failure_reports_attempts(services: Services, tmp_path: Path) -> None:
+    with pytest.raises(UpstreamError) as exc_info:
+        services.fetch.download("https://example.org/fail.xml", output=tmp_path / "paper.xml")
+    assert exc_info.value.details["attempts"] == ["fake_dl: fake download failure"]
+
+
+def test_download_populates_fetch_cache(services: Services, tmp_path: Path) -> None:
+    services.fetch.download("https://example.org/paper.pdf", output=tmp_path / "raw.pdf")
+    downloader = services.registry.get("downloader", "fake_dl")
+    calls_before = downloader.calls
+    result, _ = services.fetch.fetch("doi:10.1000/fake1", output=tmp_path / "fetched.pdf")
+    assert downloader.calls == calls_before
+    assert result.downloader == "cache"
+
+
+def test_extract_xml_default_output(services: Services, tmp_path: Path) -> None:
+    source = tmp_path / "paper.xml"
+    source.write_bytes(XML_BYTES)
+    result, warnings = services.fetch.extract(source)
+    assert warnings == []
+    assert result.source_path == source
+    assert result.source_format == "xml"
+    assert result.format == "text"
+    assert result.extractor == "fake_ext"
+    assert result.path == source.with_suffix(".txt")
+    assert result.path.read_text(encoding="utf-8").startswith("EXTRACTED[xml]")
+
+
+def test_extract_pdf_with_forced_extractor(services: Services, tmp_path: Path) -> None:
+    source = tmp_path / "paper.pdf"
+    output = tmp_path / "paper"
+    source.write_bytes(PDF_BYTES)
+    result, _ = services.fetch.extract(source, output=output, extractor="fake_ext")
+    assert result.source_format == "pdf"
+    assert result.path == output.with_suffix(".txt")
+    assert result.path.read_text(encoding="utf-8").startswith("EXTRACTED[pdf]")
+
+
+def test_extract_rejects_missing_input(services: Services, tmp_path: Path) -> None:
+    with pytest.raises(UsageError, match="Input file not found"):
+        services.fetch.extract(tmp_path / "missing.xml")
+
+
+def test_extract_rejects_unsupported_input(services: Services, tmp_path: Path) -> None:
+    source = tmp_path / "paper.txt"
+    source.write_text("already text", encoding="utf-8")
+    with pytest.raises(UsageError, match="Unsupported input extension"):
+        services.fetch.extract(source)
+
+
+def test_extract_rejects_non_text_output(services: Services, tmp_path: Path) -> None:
+    source = tmp_path / "paper.xml"
+    source.write_bytes(XML_BYTES)
+    with pytest.raises(UsageError, match="implies format"):
+        services.fetch.extract(source, output=tmp_path / "paper.pdf")
+
+
+def test_extract_rejects_invalid_xml(services: Services, tmp_path: Path) -> None:
+    source = tmp_path / "paper.xml"
+    source.write_bytes(b"<article>")
+    with pytest.raises(UpstreamError, match="not parseable XML"):
+        services.fetch.extract(source)
 
 
 class StubSearcher:

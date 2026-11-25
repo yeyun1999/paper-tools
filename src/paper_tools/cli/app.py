@@ -15,6 +15,7 @@ from paper_tools.cli import (
     config_cmd,
     context,
     fetch,
+    fulltext,
     get,
     inventory,
     mcp_cmd,
@@ -117,7 +118,7 @@ def root(
     ctx.obj = opts
 
 
-for _module in (search, get, fetch, inventory, config_cmd, cache_cmd, schema, mcp_cmd):
+for _module in (search, get, fulltext, fetch, inventory, config_cmd, cache_cmd, schema, mcp_cmd):
     _module.register(app)
 
 

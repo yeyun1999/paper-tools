@@ -3,22 +3,26 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, cast
+from typing import Annotated
 
 import typer
 
 from paper_tools.cli import context, render
+from paper_tools.cli.fulltext import (
+    DOWNLOADER_HELP,
+    EXTRACTOR_HELP,
+    LOCATOR_HELP,
+    parse_format,
+    parse_locators,
+)
 from paper_tools.core.config import FetchConfig, load_config
-from paper_tools.core.errors import ConfigError, PaperToolsError, UsageError
-from paper_tools.core.models import ArtifactFormat
-from paper_tools.core.plugins import available_names
+from paper_tools.core.errors import ConfigError, PaperToolsError
 
 # Module-level: Typer evals string annotations against module globals.
 try:
     _FETCH_CONFIG = load_config().fetch
 except ConfigError:
     _FETCH_CONFIG = FetchConfig()
-_DEFAULT_LOCATORS = ", ".join(_FETCH_CONFIG.locators) if _FETCH_CONFIG.locators else "all"
 _DEFAULT_OUTPUT = _FETCH_CONFIG.output or "safe article title in the current directory"
 _FORMAT_HELP = (
     "Output format: pdf | xml | text (download + extract). If omitted, infer from the "
@@ -28,18 +32,6 @@ _OUTPUT_HELP = (
     f"Output filename (default: {_DEFAULT_OUTPUT}). A duplicate default title gets an ID "
     "suffix. Extensions .pdf/.xml/.txt infer --format when omitted; a missing extension "
     "is appended."
-)
-_LOCATOR_HELP = (
-    "Locator plugins to restrict to; repeat the flag or comma-separate. "
-    f"'all' forces every registered locator (default: {_DEFAULT_LOCATORS}). "
-    f"Available: {', '.join(available_names('locator')) or '(none)'}."
-)
-_DOWNLOADER_HELP = (
-    f"Force a downloader plugin. Available: {', '.join(available_names('downloader')) or '(none)'}."
-)
-_EXTRACTOR_HELP = (
-    "Force an extractor plugin for --format text. Available: "
-    f"{', '.join(available_names('extractor')) or '(none)'}."
 )
 
 
@@ -61,30 +53,22 @@ def register(app: typer.Typer) -> None:
         ] = None,
         locator: Annotated[
             list[str] | None,
-            typer.Option("--locator", help=_LOCATOR_HELP),
+            typer.Option("--locator", help=LOCATOR_HELP),
         ] = None,
         downloader: Annotated[
             str | None,
-            typer.Option("--downloader", help=_DOWNLOADER_HELP),
+            typer.Option("--downloader", help=DOWNLOADER_HELP),
         ] = None,
         extractor: Annotated[
             str | None,
-            typer.Option("--extractor", help=_EXTRACTOR_HELP),
+            typer.Option("--extractor", help=EXTRACTOR_HELP),
         ] = None,
     ) -> None:
-        """Retrieve open-access full text for one paper."""
+        """Retrieve open-access full text for one paper (locate->download->extract)."""
         opts = ctx.obj
         with render.error_guard(opts, "fetch"):
-            if fmt is not None and fmt not in ("pdf", "xml", "text"):
-                raise UsageError(f"Invalid --format {fmt!r}; expected pdf, xml, or text.")
-            artifact_format = cast(ArtifactFormat, fmt) if fmt is not None else None
-            locator_names = (
-                [name.strip() for item in locator for name in item.split(",") if name.strip()]
-                if locator
-                else None
-            )
-            if locator_names is not None and "all" in locator_names:
-                locator_names = []  # explicit all overrides the fetch.locators config
+            artifact_format = parse_format(fmt)
+            locator_names = parse_locators(locator)
             services = context.build_services(opts)
             try:
                 result, warnings = services.fetch.fetch(

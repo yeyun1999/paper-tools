@@ -28,6 +28,12 @@ JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.1**）：任何�
   未指定格式时按 `.pdf` / `.xml` / `.txt` 推断，无扩展名时按格式补全（默认 PDF）；
   格式与扩展名冲突或不支持扩展名返回 `USAGE`。
 
+### 变更（CLI）
+
+- **全文流水线支持独立命令**：新增 `locate` / `download` / `extract` 结果模型
+  `FullTextLinks` / `DownloadedFullText` / `ExtractedFullText`，并加入 `schema` 导出与快照。
+  `fetch` 保留原有单篇一键流程和 `FullText` 契约；MCP 四个工具不变。
+
 ### 变更（破坏性：schema_version 1.0 → 1.1）
 
 - **Paper 新增 `fulltext_links` 字段**（`list[FullTextCandidate]`）：OpenAlex /
@@ -73,6 +79,10 @@ JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.1**）：任何�
 
 ### 新增
 
+- **全文处理阶段拆分为独立 CLI 命令**：`locate ID` 只定位并返回候选链接；
+  `download URL` 调用 Downloader 下载、校验并保存直链文件；`extract FILE` 将本地
+  PDF/JATS XML 提取为纯文本。三者支持 `--json`、动态插件帮助和结构化错误；
+  `fetch ID` 继续复用同一服务层提供定位→下载→提取的一键流程。
 - **MIT 许可证与发布元数据**：新增 `LICENSE`；`pyproject.toml` 补 `license` /
   `license-files` / `authors` / `keywords` / `classifiers`，sdist 排除
   `plugin-template`、`plugins-biorxiv`、`.github`（子项目为独立分发包）。

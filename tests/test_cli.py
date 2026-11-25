@@ -231,6 +231,132 @@ def test_fetch_bad_format(cli: CliRunner) -> None:
     assert result.exit_code == 2
 
 
+def test_locate_json(cli: CliRunner) -> None:
+    result = cli.invoke(app, ["locate", "doi:10.1000/fake1", "--json"])
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["command"] == "locate"
+    assert payload["data"]["paper"]["title"] == "CRISPR base editing review"
+    assert [c["format"] for c in payload["data"]["candidates"]] == ["pdf", "xml", "landing"]
+
+
+def test_locate_format_filter(cli: CliRunner) -> None:
+    result = cli.invoke(app, ["locate", "doi:10.1000/fake1", "--format", "text", "--json"])
+    assert result.exit_code == 0
+    candidates = json.loads(result.stdout)["data"]["candidates"]
+    assert [c["format"] for c in candidates] == ["xml", "pdf"]
+
+
+def test_locate_human_output(cli: CliRunner) -> None:
+    result = cli.invoke(app, ["locate", "doi:10.1000/fake1"])
+    assert result.exit_code == 0
+    assert "CRISPR base editing review" in result.stdout
+    assert "https://example.org/paper.pdf" in result.stdout
+    assert "landing" in result.stdout
+
+
+def test_download_json(cli: CliRunner, tmp_path: Path) -> None:
+    output = tmp_path / "paper.pdf"
+    result = cli.invoke(
+        app,
+        ["download", "https://example.org/paper.pdf", "--output", str(output), "--json"],
+    )
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["command"] == "download"
+    assert payload["data"]["format"] == "pdf"
+    assert payload["data"]["downloader"] == "fake_dl"
+    assert Path(payload["data"]["path"]) == output
+    assert output.read_bytes().startswith(b"%PDF")
+
+
+def test_download_infers_format_from_output(cli: CliRunner, tmp_path: Path) -> None:
+    output = tmp_path / "paper.xml"
+    result = cli.invoke(
+        app,
+        ["download", "https://example.org/fulltext", "--output", str(output), "--json"],
+    )
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["data"]["format"] == "xml"
+    assert b"<article>" in output.read_bytes()
+
+
+def test_download_default_output(
+    cli: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    result = cli.invoke(app, ["download", "https://example.org/paper.pdf", "--json"])
+    assert result.exit_code == 0
+    assert Path(json.loads(result.stdout)["data"]["path"]) == Path("paper.pdf")
+    assert (tmp_path / "paper.pdf").exists()
+
+
+def test_download_errors(cli: CliRunner, tmp_path: Path) -> None:
+    unknown = cli.invoke(app, ["download", "https://example.org/fulltext", "--json"])
+    assert unknown.exit_code == 2
+    assert json.loads(unknown.stdout)["error"]["code"] == "USAGE"
+    invalid = cli.invoke(app, ["download", "file:///tmp/paper.pdf", "--json"])
+    assert invalid.exit_code == 2
+    assert json.loads(invalid.stdout)["error"]["code"] == "USAGE"
+    failed = cli.invoke(
+        app,
+        [
+            "download",
+            "https://example.org/fail.xml",
+            "--output",
+            str(tmp_path / "fail.xml"),
+            "--json",
+        ],
+    )
+    assert failed.exit_code == 3
+    assert json.loads(failed.stdout)["error"]["code"] == "UPSTREAM"
+
+
+def test_extract_json(cli: CliRunner, tmp_path: Path) -> None:
+    source = tmp_path / "paper.xml"
+    output = tmp_path / "text" / "paper.txt"
+    source.write_bytes(b"<article><body><p>Hello CRISPR</p></body></article>")
+    result = cli.invoke(
+        app,
+        ["extract", str(source), "--output", str(output), "--json"],
+    )
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["command"] == "extract"
+    assert payload["data"]["source_format"] == "xml"
+    assert payload["data"]["format"] == "text"
+    assert payload["data"]["extractor"] == "fake_ext"
+    assert Path(payload["data"]["path"]) == output
+    assert output.read_text(encoding="utf-8").startswith("EXTRACTED[xml]")
+
+
+def test_extract_default_output(cli: CliRunner, tmp_path: Path) -> None:
+    source = tmp_path / "paper.xml"
+    source.write_bytes(b"<article><body><p>Hello CRISPR</p></body></article>")
+    result = cli.invoke(app, ["extract", str(source), "--json"])
+    assert result.exit_code == 0
+    assert Path(json.loads(result.stdout)["data"]["path"]) == source.with_suffix(".txt")
+    assert source.with_suffix(".txt").exists()
+
+
+def test_extract_errors(cli: CliRunner, tmp_path: Path) -> None:
+    missing = cli.invoke(app, ["extract", str(tmp_path / "missing.xml"), "--json"])
+    assert missing.exit_code == 2
+    assert json.loads(missing.stdout)["error"]["code"] == "USAGE"
+    source = tmp_path / "paper.txt"
+    source.write_text("already text", encoding="utf-8")
+    unsupported = cli.invoke(app, ["extract", str(source), "--json"])
+    assert unsupported.exit_code == 2
+    assert json.loads(unsupported.stdout)["error"]["code"] == "USAGE"
+    xml = tmp_path / "paper.xml"
+    xml.write_bytes(b"<article>")
+    mismatch = cli.invoke(
+        app, ["extract", str(xml), "--output", str(tmp_path / "paper.pdf"), "--json"]
+    )
+    assert mismatch.exit_code == 2
+    assert json.loads(mismatch.stdout)["error"]["code"] == "USAGE"
+
+
 def test_sources_lists_all_roles(cli: CliRunner) -> None:
     result = cli.invoke(app, ["sources", "--json"])
     data = json.loads(result.stdout)["data"]
@@ -247,6 +373,15 @@ def test_schema_command(cli: CliRunner) -> None:
     result = cli.invoke(app, ["schema", "get"])
     assert result.exit_code == 0
     assert "Paper" in json.loads(result.stdout)
+    for command, model in (
+        ("locate", "FullTextLinks"),
+        ("download", "DownloadedFullText"),
+        ("extract", "ExtractedFullText"),
+        ("fetch", "FullText"),
+    ):
+        result = cli.invoke(app, ["schema", command])
+        assert result.exit_code == 0
+        assert model in json.loads(result.stdout)
     result = cli.invoke(app, ["schema", "bogus"])
     assert result.exit_code == 2
 
@@ -325,6 +460,20 @@ def test_help_lists_available_plugins_and_descriptions() -> None:
     assert "Batch output" not in fetched.stdout
     expected_default = ", ".join(load_config().fetch.locators) or "all"
     assert f"'all' forces every registered locator (default: {expected_default})" in fetched.stdout
+    for command in ("locate", "download", "extract"):
+        help_result = runner.invoke(app, [command, "--help"])
+        assert help_result.exit_code == 0
+        assert "--output" in help_result.stdout or command == "locate"
+        assert "[default:" not in help_result.stdout
+    locate_help = runner.invoke(app, ["locate", "--help"]).stdout
+    for name in ("europepmc", "openalex", "pmc_oa", "unpaywall"):
+        assert name in locate_help
+    download_help = runner.invoke(app, ["download", "--help"]).stdout
+    for name in ("europepmc", "http_direct", "pmc_oa"):
+        assert name in download_help
+    extract_help = runner.invoke(app, ["extract", "--help"]).stdout
+    for name in ("jats", "pypdf"):
+        assert name in extract_help
     root = runner.invoke(app, ["--help"])
     assert "Show the version and exit" in root.stdout
     config_set = runner.invoke(app, ["config", "set", "--help"])

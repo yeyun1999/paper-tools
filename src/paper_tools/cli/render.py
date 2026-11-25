@@ -13,7 +13,15 @@ from rich.table import Table
 
 from paper_tools.cli.context import GlobalOpts
 from paper_tools.core.errors import PaperToolsError
-from paper_tools.core.models import SCHEMA_VERSION, FullText, Paper, SearchPage
+from paper_tools.core.models import (
+    SCHEMA_VERSION,
+    DownloadedFullText,
+    ExtractedFullText,
+    FullText,
+    FullTextLinks,
+    Paper,
+    SearchPage,
+)
 
 console = Console()
 err_console = Console(stderr=True)
@@ -127,6 +135,37 @@ def render_fulltext(result: FullText) -> None:
     console.print(f"  source: {result.source_url} (via {result.downloader})")
     if result.extractor:
         console.print(f"  extracted from {result.extracted_from} by {result.extractor}")
+
+
+def render_fulltext_links(result: FullTextLinks) -> None:
+    console.print(f"[bold]{result.paper.title or 'Full-text candidates'}[/bold]")
+    if not result.candidates:
+        console.print("No full-text candidates found.")
+        return
+    table = Table()
+    table.add_column("Format")
+    table.add_column("URL")
+    table.add_column("Locator")
+    table.add_column("License")
+    for candidate in result.candidates:
+        table.add_row(
+            candidate.format,
+            candidate.url,
+            candidate.locator,
+            candidate.license or "",
+        )
+    console.print(table)
+
+
+def render_downloaded_fulltext(result: DownloadedFullText) -> None:
+    console.print(f"[green]OK[/green] {result.format} -> {result.path}")
+    console.print(f"  source: {result.source_url} (via {result.downloader})")
+
+
+def render_extracted_fulltext(result: ExtractedFullText) -> None:
+    console.print(f"[green]OK[/green] text -> {result.path}")
+    console.print(f"  source: {result.source_path} ({result.source_format})")
+    console.print(f"  extractor: {result.extractor}")
 
 
 def render_inventory(groups: dict[str, list[dict[str, Any]]]) -> None:

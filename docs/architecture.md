@@ -2,7 +2,7 @@
 
 > 面向生物医学研究者的文献检索与全文获取 CLI。人类与 AI 助理双用户，检索、元数据补全、全文定位、下载、文本提取五类能力全部插件化，uv 管理环境。
 >
-> 状态：设计稿 v2（待评审）。v2 变更：插件接口由 2 类扩展为 5 类角色（Searcher / MetadataProvider / Locator / Downloader / Extractor），新增元数据补全链与文本提取流水线。配套开发计划见 [roadmap.md](roadmap.md)。
+> 状态：设计稿 v2（待评审）。v2 变更：插件接口由 2 类扩展为 5 类角色（Searcher / MetadataProvider / Locator / Downloader / Extractor），新增元数据补全链与文本提取流水线。后续 CLI 增量：`locate` / `download` / `extract` 独立命令与 `fetch` 一键流程并存。配套开发计划见 [roadmap.md](roadmap.md)。
 
 ## 1. 定位与设计目标
 
@@ -45,12 +45,12 @@
 ```
 search ──► Paper 浅记录 ──enrich──► Paper 完整记录
                                       │
-              ┌───────────────────────┤
-              ▼                       ▼
-           locate ──► 候选列表 ──► download ──► PDF/XML 产物
-                                               │ (--format text)
-                                               ▼
-                                            extract ──► 纯文本
+                                      ▼
+locate ID ──► 候选列表 ──► download URL ──► PDF/XML/text
+                                                               │
+                                                               ▼
+                                                         extract FILE ──► 纯文本
+fetch ID ──► locate → download →（text 时 extract）→ 最终文件（一键流程）
 ```
 
 数据流（以 `fetch doi:10.1038/xxx --format pdf` 为例）：
@@ -94,7 +94,7 @@ paper-tools/
 │   ├── __main__.py             # python -m paper_tools
 │   ├── cli/
 │   │   ├── app.py              # Typer 根应用、全局选项、异常→退出码映射
-│   │   ├── search.py / get.py / fetch.py
+│   │   ├── search.py / get.py / fetch.py / fulltext.py
 │   │   ├── plugins.py          # sources 命令
 │   │   ├── config.py / cache.py / schema.py / mcp.py
 │   │   └── render.py           # Rich 表格与 JSON 双输出
@@ -129,7 +129,7 @@ paper-tools/
 
 ## 5. 核心域模型
 
-所有模型为 pydantic v2，字段即 JSON 契约（`schema_version = "1.1"`；1.0 于 M5 冻结，1.1 新增 Paper.fulltext_links）。示意：
+所有模型为 pydantic v2，字段即 JSON 契约（`schema_version = "1.1"`；1.0 于 M5 冻结，1.1 新增 Paper.fulltext_links；独立全文命令新增结果模型但不改变既有 envelope）。示意：
 
 ```python
 class Author(BaseModel):
@@ -174,6 +174,29 @@ class Artifact(BaseModel):
     source_url: str
     downloader: str
     license: str | None = None
+
+
+class FullTextLinks(BaseModel):
+    paper: Paper
+    candidates: list[FullTextCandidate]
+
+
+class DownloadedFullText(BaseModel):
+    source_url: str
+    format: Literal["pdf", "xml", "text"]
+    path: Path
+    sha256: str
+    downloader: str
+    license: str | None = None
+
+
+class ExtractedFullText(BaseModel):
+    source_path: Path
+    source_format: Literal["pdf", "xml"]
+    format: Literal["text"] = "text"
+    path: Path
+    sha256: str
+    extractor: str
 
 
 class FullText(BaseModel):
@@ -364,6 +387,19 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 
 ### 8.3 FetchService（定位 → 下载 → 提取）
 
+服务层暴露四个公共入口，CLI 与 MCP 按需组合，避免把一键流程当成唯一使用方式：
+
+| 方法 | 对应命令 | 职责与结果 |
+|---|---|---|
+| `locate(identifier, fmt, locators)` | `locate` | 补全元数据、收集/去重/排序候选；返回 `FullTextLinks`，不下载 |
+| `download(url, fmt, output, downloader)` | `download` | 路由 Downloader、校验并保存直链；返回 `DownloadedFullText` |
+| `extract(source, output, extractor)` | `extract` | 校验本地 PDF/JATS XML、调用 Extractor；返回 `ExtractedFullText` |
+| `fetch(identifier, fmt, output, locators, downloader, extractor)` | `fetch` / MCP `fetch_fulltext` | 编排完整流水线；返回 `FullText` |
+
+`locate` 未指定格式时保留 landing 候选（便于展示出版商页面），指定格式时排除 landing；text 筛选接受 PDF/XML/text 来源。`download` 未指定格式时按输出扩展名、再按 URL 路径推断；显式 `--output` 无扩展名且 URL 也无法识别时默认 PDF，完全未提供输出时才要求 `--format`。`extract` 只接受 PDF/XML 输入和 text 输出，默认同目录同名 `.txt`。
+
+以下为 `fetch` 的完整流水线规则，独立命令复用相同的收集、下载校验、提取与文件存储逻辑：
+
 1. **收集**：先以 `paper.fulltext_links`（搜索/补全期捕获的链接）作为种子候选，再调用所有 Locator 的 `resolve(paper)` 补充（合并而非短路，保留降级多样性）；Locator 的 `ConfigError`/上游错误降级为 `warnings` 并跳过该定位器（单个定位器缺配置不阻断 fetch，如未配 Unpaywall email 仍可用其余定位器）。补全链的 `ConfigError` 则保持严格传播（退出码 5）。
 2. **去重排序**：按 URL+格式 去重（同一 PMC 版本可同时产出 XML 与 PDF 候选）；排序键 = 格式匹配度 > 来源可信度（europepmc/pmc_oa 直链 > unpaywall 出版商直链 > 其他）> license 明确度。
 3. **下载与校验**：候选路由给 `supports()` 且 `formats` 匹配的 Downloader；PDF 校验 `%PDF` 魔数与最小体积，XML 校验可解析且含 `<article>`；失败自动降级下一候选。
@@ -379,7 +415,10 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 |---|---|---|
 | `search QUERY` | 检索（返回浅记录） | `--source`（可重复/逗号分隔/`all`，多源并发+去重；默认 `general.default_source`）、`--limit`、`--cursor`（多源为 `ms1.` 聚合游标，兼容 JSON）、`--author`、`--journal`、`--year-from/--year-to`、`--oa-only`、`--raw`、`--fields`、`--enrich`（走补全链） |
 | `get ID...` | 按标识符取完整元数据（stub → 补全链），支持多个 ID 批量 | `--source`（可选，限定补全来源）、`--fields`；批量 `--json` 为 NDJSON，逐 ID 错误进 stdout 结果流，退出码取首个失败 |
-| `fetch ID` | 获取单篇文献全文 | `--format pdf\|xml\|text`（可选，省略时按输出扩展名推断）、`--output FILE`（可选，默认安全化文章标题，重名追加 ID）、`--locator`（可重复指定或逗号分隔，限定定位器；`all` 强制全部；默认取 `fetch.locators` 配置，空则全部）、`--downloader`（强制指定）、`--extractor`（text 时强制指定） |
+| `locate ID` | 定位单篇文献的全文候选链接，不下载 | `--format`（筛选 pdf/xml；text 含可转换来源）、`--locator`（可重复/逗号分隔/`all`） |
+| `download URL` | 下载并校验一个全文直链 | `--format pdf\|xml\|text`（按输出扩展名或 URL 推断）、`--output FILE`（默认安全化 URL 名）、`--downloader` |
+| `extract FILE` | 将本地 PDF/JATS XML 提取为纯文本 | `--output FILE`（默认同名 `.txt`）、`--extractor` |
+| `fetch ID` | 一键获取单篇文献全文 | `--format pdf\|xml\|text`（可选，省略时按输出扩展名推断）、`--output FILE`（可选，默认安全化文章标题，重名追加 ID）、`--locator`（可重复指定或逗号分隔，限定定位器；`all` 强制全部；默认取 `fetch.locators` 配置，空则全部）、`--downloader`（强制指定）、`--extractor`（text 时强制指定） |
 | `sources` | 列出全部已注册插件（按五类角色分组）与关键属性 | |
 | `config get\|set\|list\|path` | 配置管理 | 点分键，如 `plugins.unpaywall.email` |
 | `cache clear\|stats` | 缓存管理 | |
@@ -390,7 +429,7 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 
 ### 9.2 JSON 输出契约（AI 助理主通道）
 
-- 单 ID 命令（包括 `fetch` / `get`）的 `--json` 输出为 stdout 上的单个 JSON 对象，日志/进度全部走 stderr：
+- 单 ID 命令（包括 `locate` / `download` / `extract` / `fetch` / `get`）的 `--json` 输出为 stdout 上的单个 JSON 对象，日志/进度全部走 stderr：
 
 ```json
 {
@@ -436,6 +475,9 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 # 研究者
 paper-tools search "CRISPR base editing" --year-from 2020 --limit 20
 paper-tools search "CRISPR base editing" --enrich          # 补全摘要/OA 状态
+paper-tools locate doi:10.1038/s41586-020-2649-2 --json
+paper-tools download "$FULLTEXT_URL" --output papers/paper.pdf
+paper-tools extract papers/paper.pdf --output papers/paper.txt
 paper-tools fetch doi:10.1038/s41586-020-2649-2 --output papers/paper.pdf
 
 # AI 助理
