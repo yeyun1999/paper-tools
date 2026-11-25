@@ -1,7 +1,7 @@
 # Changelog
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。
-JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.1**）：任何字段变更必须更新
+JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.2**）：任何字段变更必须更新
 `tests/snapshots/schema_v1.json` 快照、在本文件标注，并视为破坏性变更（提升 schema_version）。
 
 ## [未发布]
@@ -28,11 +28,22 @@ JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.1**）：任何�
   未指定格式时按 `.pdf` / `.xml` / `.txt` 推断，无扩展名时按格式补全（默认 PDF）；
   格式与扩展名冲突或不支持扩展名返回 `USAGE`。
 
+### 变更（破坏性：schema_version 1.1 → 1.2）
+
+- **全文候选新增来源聚合与下载器推荐**：`FullTextCandidate.locator` 由字符串改为
+  `list[str]`，新增有序的 `downloaders: list[str]`。同一 URL+格式的候选会合并 locator
+  与 downloader 有序并集；`locate` 为每个可下载候选计算推荐列表，`fetch` 严格按该顺序
+  尝试，显式 `--downloader` 仍可覆盖。landing 候选的 downloaders 为空。
+- **补全缓存键含 schema_version**：契约升级自动失效旧缓存，避免读取旧 locator 字符串。
+
 ### 变更（CLI）
 
+- **内置下载器合并为 `http_direct`**：移除 `europepmc` / `pmc_oa` Downloader 实现与
+  entry point，Europe PMC XML、PMC S3 PDF/XML 和其他 HTTP(S) 直链统一由 `http_direct`
+  下载；Locator、PMC 限流和候选来源溯源保持不变，下载结果溯源统一为 `http_direct`。
 - **全文流水线支持独立命令**：新增 `locate` / `download` / `extract` 结果模型
   `FullTextLinks` / `DownloadedFullText` / `ExtractedFullText`，并加入 `schema` 导出与快照。
-  `fetch` 保留原有单篇一键流程和 `FullText` 契约；MCP 四个工具不变。
+  `fetch` 保留原有单篇一键流程和 `FullText` 顶层结果模型；MCP 四个工具不变。
 
 ### 变更（破坏性：schema_version 1.0 → 1.1）
 

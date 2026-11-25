@@ -114,7 +114,7 @@ def test_locator_best_oa_location(plugin_ctx: PluginContext) -> None:
         ("https://pub.org/paper.pdf", "pdf"),
         ("https://pub.org/paper", "landing"),
     }
-    assert all(c.locator == "openalex" and c.license == "cc-by" for c in candidates)
+    assert all(c.locator == ["openalex"] and c.license == "cc-by" for c in candidates)
 
 
 @respx.mock
@@ -168,4 +168,4 @@ def test_search_captures_fulltext_links(plugin_ctx: PluginContext) -> None:
         ("https://pub.org/paper.pdf", "pdf"),
         ("https://pub.org/paper", "landing"),
     }
-    assert all(link.locator == "openalex" for link in links)
+    assert all(link.locator == ["openalex"] for link in links)

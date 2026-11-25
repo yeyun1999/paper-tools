@@ -1,10 +1,10 @@
-"""PMC Article Datasets plugin: ID conversion, AWS location, direct downloads."""
+"""PMC Article Datasets plugin: ID conversion and AWS full-text location."""
 
 from __future__ import annotations
 
 from typing import Any, cast
 
-from paper_tools.core.models import Artifact, ArtifactFormat, FullTextCandidate, Paper
+from paper_tools.core.models import FullTextCandidate, Paper
 from paper_tools.core.plugins import PluginContext, PluginMeta
 
 S3_BASE = "https://pmc-oa-opendata.s3.amazonaws.com"
@@ -15,7 +15,7 @@ _S3_PREFIX = "s3://pmc-oa-opendata/"
 
 def _https_url(href: str) -> str:
     if href.startswith(_S3_PREFIX):
-        return f"{S3_BASE}/{href[len(_S3_PREFIX):]}"
+        return f"{S3_BASE}/{href[len(_S3_PREFIX) :]}"
     return href
 
 
@@ -63,9 +63,7 @@ class PmcOaLocator(_PmcOaBase):
         version = self._current_version(paper)
         if not version:
             return []
-        metadata = self.ctx.http.get_json(
-            f"{S3_BASE}/{version}/{version}.json", cache_ttl=_TTL
-        )
+        metadata = self.ctx.http.get_json(f"{S3_BASE}/{version}/{version}.json", cache_ttl=_TTL)
         candidates: list[FullTextCandidate] = []
         for key, fmt in (("pdf_url", "pdf"), ("xml_url", "xml")):
             href = metadata.get(key)
@@ -74,7 +72,7 @@ class PmcOaLocator(_PmcOaBase):
                     FullTextCandidate(
                         url=_https_url(href),
                         format=fmt,
-                        locator="pmc_oa",
+                        locator=["pmc_oa"],
                         license=metadata.get("license_code"),
                     )
                 )
@@ -83,20 +81,3 @@ class PmcOaLocator(_PmcOaBase):
 
 def resolve_pmc_candidates(pmcid: str, ctx: PluginContext) -> list[FullTextCandidate]:
     return PmcOaLocator(ctx).resolve(Paper(identifiers={"pmcid": pmcid}))
-
-
-class PmcOaDownloader(_PmcOaBase):
-    meta = PluginMeta(name="pmc_oa", version="0.1.0", description="PMC Article Datasets downloader")
-    formats = frozenset({"pdf", "xml"})
-
-    def supports(self, candidate: FullTextCandidate) -> bool:
-        return candidate.locator == "pmc_oa" and candidate.url.startswith(f"{S3_BASE}/")
-
-    def download(self, candidate: FullTextCandidate) -> Artifact:
-        return Artifact(
-            format=cast(ArtifactFormat, candidate.format),
-            content=self.ctx.http.get_bytes(candidate.url),
-            source_url=candidate.url,
-            downloader="pmc_oa",
-            license=candidate.license,
-        )

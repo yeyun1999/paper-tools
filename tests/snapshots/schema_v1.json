@@ -5,7 +5,7 @@
       "details": {},
       "message": "example"
     },
-    "schema_version": "1.1"
+    "schema_version": "1.2"
   },
   "models": {
     "Artifact": {
@@ -229,6 +229,13 @@
         },
         "FullTextCandidate": {
           "properties": {
+            "downloaders": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Downloaders",
+              "type": "array"
+            },
             "format": {
               "enum": [
                 "pdf",
@@ -252,8 +259,11 @@
               "title": "License"
             },
             "locator": {
+              "items": {
+                "type": "string"
+              },
               "title": "Locator",
-              "type": "string"
+              "type": "array"
             },
             "url": {
               "title": "Url",
@@ -477,6 +487,13 @@
     },
     "FullTextCandidate": {
       "properties": {
+        "downloaders": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Downloaders",
+          "type": "array"
+        },
         "format": {
           "enum": [
             "pdf",
@@ -500,8 +517,11 @@
           "title": "License"
         },
         "locator": {
+          "items": {
+            "type": "string"
+          },
           "title": "Locator",
-          "type": "string"
+          "type": "array"
         },
         "url": {
           "title": "Url",
@@ -557,6 +577,13 @@
         },
         "FullTextCandidate": {
           "properties": {
+            "downloaders": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Downloaders",
+              "type": "array"
+            },
             "format": {
               "enum": [
                 "pdf",
@@ -580,8 +607,11 @@
               "title": "License"
             },
             "locator": {
+              "items": {
+                "type": "string"
+              },
               "title": "Locator",
-              "type": "string"
+              "type": "array"
             },
             "url": {
               "title": "Url",
@@ -808,6 +838,13 @@
         },
         "FullTextCandidate": {
           "properties": {
+            "downloaders": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Downloaders",
+              "type": "array"
+            },
             "format": {
               "enum": [
                 "pdf",
@@ -831,8 +868,11 @@
               "title": "License"
             },
             "locator": {
+              "items": {
+                "type": "string"
+              },
               "title": "Locator",
-              "type": "string"
+              "type": "array"
             },
             "url": {
               "title": "Url",
@@ -1114,6 +1154,13 @@
         },
         "FullTextCandidate": {
           "properties": {
+            "downloaders": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Downloaders",
+              "type": "array"
+            },
             "format": {
               "enum": [
                 "pdf",
@@ -1137,8 +1184,11 @@
               "title": "License"
             },
             "locator": {
+              "items": {
+                "type": "string"
+              },
               "title": "Locator",
-              "type": "string"
+              "type": "array"
             },
             "url": {
               "title": "Url",
@@ -1322,11 +1372,11 @@
       "type": "object"
     }
   },
-  "schema_version": "1.1",
+  "schema_version": "1.2",
   "success_envelope": {
     "command": "cmd",
     "data": {},
-    "schema_version": "1.1",
+    "schema_version": "1.2",
     "warnings": []
   }
 }

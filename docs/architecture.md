@@ -57,7 +57,7 @@ fetch ID ──► locate → download →（text 时 extract）→ 最终文件
 
 1. CLI 解析标识符 → `MetadataService` 构造 stub Paper，走补全链取回完整元数据。
 2. `FetchService` 向所有 Locator 插件收集 `FullTextCandidate`（Unpaywall 定位 OA 链接、Europe PMC / PMC OA 直接给直链）。
-3. 候选去重、按格式与来源可信度排序，路由给声明支持该候选的 Downloader 逐个尝试，下载并校验（PDF 魔数、XML 可解析）。
+3. 候选按 URL+格式去重并合并 locator 来源列表，计算有序 downloaders 推荐列表；按格式与来源可信度排序后，依次尝试候选下载器并校验（PDF 魔数、XML 可解析）。
 4. 成功：写入输出目录与文件缓存，返回 `FullText` 结果；全部失败：返回出版商链接，退出码 4。
 5. 若 `--format text`：产物交给对应 Extractor（XML→JATS 解析，PDF→pypdf），输出纯文本并记录提取器溯源。
 
@@ -109,13 +109,13 @@ paper-tools/
 │   │   └── services.py         # SearchService / MetadataService / FetchService
 │   ├── plugins/                # 内置插件（每个一文件，复杂者可成包）
 │   │   ├── pubmed.py           # Searcher + MetadataProvider
-│   │   ├── europepmc.py        # Searcher + MetadataProvider + Locator + Downloader
+│   │   ├── europepmc.py        # Searcher + MetadataProvider + Locator
 │   │   ├── crossref.py         # Searcher + MetadataProvider
 │   │   ├── openalex.py         # Searcher + MetadataProvider + Locator
 │   │   ├── semantic_scholar.py # Searcher + MetadataProvider
 │   │   ├── unpaywall.py        # MetadataProvider(metadata + OA) + Locator
-│   │   ├── pmc_oa.py           # Locator + Downloader
-│   │   ├── http_direct.py      # Downloader（通用）
+│   │   ├── pmc_oa.py           # Locator
+│   │   ├── http_direct.py      # Downloader（唯一内置）
 │   │   ├── jats.py             # Extractor（XML→text）
 │   │   └── pypdf_extractor.py  # Extractor（PDF→text，extra text）
 │   └── py.typed
@@ -129,7 +129,7 @@ paper-tools/
 
 ## 5. 核心域模型
 
-所有模型为 pydantic v2，字段即 JSON 契约（`schema_version = "1.1"`；1.0 于 M5 冻结，1.1 新增 Paper.fulltext_links；独立全文命令新增结果模型但不改变既有 envelope）。示意：
+所有模型为 pydantic v2，字段即 JSON 契约（`schema_version = "1.2"`；1.0 于 M5 冻结，1.1 新增 Paper.fulltext_links，1.2 将候选 locator 改为列表并新增 downloaders 推荐列表）。示意：
 
 ```python
 class Author(BaseModel):
@@ -163,7 +163,8 @@ class SearchPage(BaseModel):
 class FullTextCandidate(BaseModel):
     url: str
     format: Literal["pdf", "xml", "text", "landing"]
-    locator: str  # 定位到该候选的插件
+    locator: list[str]  # 定位到该候选的插件；同 URL+格式会合并多个来源
+    downloaders: list[str] = []  # 按推荐尝试顺序排列的下载器；landing 为空
     license: str | None = None
 
 
@@ -257,7 +258,7 @@ class Query(BaseModel):
 | Downloader | `paper_tools.downloaders` | 下载候选并校验产物 | `formats`：支持的产物格式 |
 | Extractor | `paper_tools.extractors` | PDF/XML → 纯文本 | `source_formats`：可处理的输入格式 |
 
-拆分原则：**按行为职责拆，不按数据格式拆**。文本与 PDF 的差异由格式校验器和 Extractor 阶段处理，下载接口不因格式分裂——同一来源（如 Europe PMC）既给 XML 又给 PDF，只注册一个 Downloader。而"定位"与"传输"是两种真实不同的行为：Unpaywall 只定位不下载，通用 HTTP 下载器只下载不定位，因此拆为 Locator / Downloader 两个接口。
+拆分原则：**按行为职责拆，不按数据格式拆**。文本与 PDF 的差异由格式校验器和 Extractor 阶段处理，下载接口不因格式分裂。内置下载统一由 `http_direct` 完成；Locator 仍只负责找链接，第三方如需特殊传输可注册自己的 Downloader。
 
 一个插件类可同时实现多个角色，注册到多个 group。内置插件在主包 `pyproject.toml` 中自我声明，与第三方完全同构：
 
@@ -284,8 +285,6 @@ pmc_oa = "paper_tools.plugins.pmc_oa:PmcOaLocator"
 openalex = "paper_tools.plugins.openalex:OpenAlexLocator"
 
 [project.entry-points."paper_tools.downloaders"]
-europepmc = "paper_tools.plugins.europepmc:EuropePmcDownloader"
-pmc_oa = "paper_tools.plugins.pmc_oa:PmcOaDownloader"
 http_direct = "paper_tools.plugins.http_direct:HttpDirectDownloader"
 
 [project.entry-points."paper_tools.extractors"]
@@ -347,8 +346,8 @@ class Extractor(Protocol):
 设计要点：
 
 - **enrich 统一了"按 ID 取详情"与"补全浅记录"**：`get doi:...` 就是构造只含该标识符的 stub 走补全链；search 结果的补全是同一条链。补全来源不必是搜索引擎（Unpaywall 补 OA 状态/license）。
-- **Locator 只找不下**：产出的候选由 FetchService 路由给 `supports()` 返回 True 的 Downloader；`landing` 候选永不下载，仅兜底展示。
-- **Downloader 按候选路由而非按 Paper**：`http_direct` 支持任意 http(s) 直链；`pmc_oa` 只支持 PMC Article Datasets 的 AWS 地址，直接下载单篇 PDF/XML；`europepmc` 只支持自家 fullTextXML 地址（PDF 由 pmc_oa/unpaywall 覆盖）。
+- **Locator 只找不下**：产出的候选使用 `locator=[meta.name]`；FetchService 按 URL+格式合并多个 Locator 的来源列表，并按当前注册的 Downloader 计算有序 `downloaders` 推荐列表。`landing` 候选永不下载，仅兜底展示，其 downloaders 为空。
+- **Downloader 按候选路由而非按 Paper**：内置仅保留 `http_direct`，统一处理 Europe PMC、PMC S3 和其他 HTTP(S) 直链；第三方专用 Downloader 仍可通过 `supports()` 和候选的 `downloaders` 推荐顺序接入。显式 `--downloader` 可覆盖推荐顺序。
 - **Extractor 与下载正交**：`--format text` 时按产物格式选提取器（XML→jats，PDF→pypdf），可被第三方替换（GROBID、marker）；提取结果记录 `extractor` 与 `extracted_from` 溯源。
 
 ### 7.3 内置插件清单
@@ -356,13 +355,13 @@ class Extractor(Protocol):
 | 插件 | 角色 | 说明 |
 |---|---|---|
 | pubmed | Searcher + MetadataProvider | NCBI E-utilities（esearch/esummary/efetch），默认相关性排序（Best Match），PMID/PMCID 映射，api_key 支持 |
-| europepmc | Searcher + MetadataProvider + Locator + Downloader | REST API；fullTextXML 直接给 JATS XML |
+| europepmc | Searcher + MetadataProvider + Locator | REST API；fullTextXML 直链由 http_direct 下载 |
 | crossref | Searcher + MetadataProvider | DOI 元数据权威源，`/works`；mailto polite pool；JATS 摘要清洗为纯文本；无可靠 OA 过滤（`--oa-only` 报 UsageError） |
 | openalex | Searcher + MetadataProvider + Locator | 元数据 + `best_oa_location` OA 定位；倒排索引摘要重建；cursor 分页；doi/openalex/pmid/pmcid 四路补全；可选 api_key（`Authorization: Bearer`，配后限流提至 10 req/s） |
 | semantic_scholar | Searcher + MetadataProvider | Graph API；`x-api-key` 支持；DOI/PMID/PMCID/S2/ARXIV 五路补全；1 req/s + 退避应对共享限额 |
 | unpaywall | MetadataProvider + Locator | enrich 补书目元数据与 OA 字段；resolve 按 DOI 查 OA 副本，PMC 仓库位置经 pmh_id 解析为官方数据集 PDF/XML（需配置 email） |
-| pmc_oa | Locator + Downloader | PMC ID Converter 选当前版本，读取 AWS Article Datasets 元数据定位并直接下载 PDF/XML；无可用记录返回空候选 |
-| http_direct | Downloader | 通用 HTTP 传输兜底；魔数/体积/XML 校验由 FetchService 统一执行 |
+| pmc_oa | Locator | PMC ID Converter 选当前版本，读取 AWS Article Datasets 元数据定位 PDF/XML；实际下载由 http_direct 完成 |
+| http_direct | Downloader | 唯一内置下载器，统一处理 HTTP(S) 全文直链；魔数/体积/XML 校验由 FetchService 统一执行 |
 | jats | Extractor | JATS XML → 纯文本（内置，无额外依赖） |
 | pypdf | Extractor | PDF → 纯文本（extra `text`），质量有限需标注 |
 
@@ -401,8 +400,8 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 以下为 `fetch` 的完整流水线规则，独立命令复用相同的收集、下载校验、提取与文件存储逻辑：
 
 1. **收集**：先以 `paper.fulltext_links`（搜索/补全期捕获的链接）作为种子候选，再调用所有 Locator 的 `resolve(paper)` 补充（合并而非短路，保留降级多样性）；Locator 的 `ConfigError`/上游错误降级为 `warnings` 并跳过该定位器（单个定位器缺配置不阻断 fetch，如未配 Unpaywall email 仍可用其余定位器）。补全链的 `ConfigError` 则保持严格传播（退出码 5）。
-2. **去重排序**：按 URL+格式 去重（同一 PMC 版本可同时产出 XML 与 PDF 候选）；排序键 = 格式匹配度 > 来源可信度（europepmc/pmc_oa 直链 > unpaywall 出版商直链 > 其他）> license 明确度。
-3. **下载与校验**：候选路由给 `supports()` 且 `formats` 匹配的 Downloader；PDF 校验 `%PDF` 魔数与最小体积，XML 校验可解析且含 `<article>`；失败自动降级下一候选。
+2. **去重排序**：按 URL+格式 去重；同键候选合并 `locator` 与 `downloaders` 有序并集，并优先保留已有 license。同一 PMC 版本可同时产出 XML 与 PDF 候选。排序键 = 格式匹配度 > 来源可信度（locator 列表中任一 europepmc/pmc_oa 视为可信，其次任一 unpaywall，最后其他）> license 明确度。
+3. **下载与校验**：内置候选的 `downloaders` 推荐列表统一为 `["http_direct"]`；第三方 Downloader 仍按推荐顺序接入。仅保留 `formats` 匹配且 `supports()` 为 True 的插件，失败后尝试列表中的下一个。显式 `--downloader` 仍作为强制覆盖。PDF 校验 `%PDF` 魔数与最小体积，XML 校验可解析且含 `<article>`；全部失败后降级下一候选。
 4. **提取（仅 --format text）**：产物按格式选 Extractor（XML→jats 优先；PDF→pypdf，可用 `--extractor` 强制指定）；输出 `.txt` 并记录 `extractor`/`extracted_from`。
 5. **落盘与缓存**：未指定 `--output` / `fetch.output` 时，在当前目录使用安全化文章标题作为文件名；重名时追加 DOI（其次 PMID/PMCID 等 ID）。显式输出保持固定文件名。未指定格式时按 `.pdf` / `.xml` / `.txt` 推断，无扩展名时补全（默认 PDF），格式与扩展名冲突返回 `USAGE`。同时写入文件缓存 `cache/papers/<sha256>.<ext>` + 映射 sidecar（sha256/ext/最终格式/extractor/extracted_from）。缓存存的是**最终产物**（text 请求存已提取文本），命中时跳过重复校验与重复提取，并恢复提取溯源；重复请求不重复下载。
 6. **失败路径**：所有候选失败或 `oa_status=closed` → 结构化错误 `FULLTEXT_UNAVAILABLE`，附 `publisher_url`，退出码 4。
@@ -433,7 +432,7 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 
 ```json
 {
-  "schema_version": "1.1",
+  "schema_version": "1.2",
   "command": "search",
   "data": { "items": [], "total": 0, "next_cursor": null, "source": "pubmed" },
   "warnings": []
@@ -444,7 +443,7 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 
 ```json
 {
-  "schema_version": "1.1",
+  "schema_version": "1.2",
   "error": {
     "code": "USAGE",
     "message": "Invalid --format; expected pdf, xml, or text.",
@@ -498,7 +497,7 @@ paper-tools fetch doi:10.1038/s41586-020-2649-2 --output papers/paper.txt --json
 | `fetch_fulltext` | FetchService（定位→下载→提取） | FullText envelope（含落盘路径） |
 | `list_sources` | PluginRegistry.describe | 五角色插件清单 envelope |
 
-- 入参语义与 CLI 选项同源（pydantic `Field` 注解生成 inputSchema）；返回与 `--json` 完全一致的 success/error envelope（schema_version 1.1）。业务错误不抛异常，而是返回 `{"error": {code, message, details}}` envelope，agent 按 `error.code` 分支处理。
+- 入参语义与 CLI 选项同源（pydantic `Field` 注解生成 inputSchema）；返回与 `--json` 完全一致的 success/error envelope（schema_version 1.2）。业务错误不抛异常，而是返回 `{"error": {code, message, details}}` envelope，agent 按 `error.code` 分支处理。
 - stdio 纯度：协议外输出全部走 stderr（logging 已配置 stderr）；工具函数为同步实现，由 SDK 调度。
 - 契约测试：`tests/test_mcp.py`（fake 插件下四工具 envelope/错误路径 + 真实子进程 stdio 往返 + 入参 schema 冻结）；`tests/integration/test_live.py::test_mcp_stdio_full_flow_live`（真实 API 下 search→get→fetch 全流程）。
 - 挂载配置与调用范式见 [examples/agent-usage.md](../examples/agent-usage.md)。

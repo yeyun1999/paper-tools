@@ -88,10 +88,12 @@ class MyLocator:
     def resolve(self, paper: Paper) -> list[FullTextCandidate]: ...
 ```
 
-- `FullTextCandidate(url, format, locator, license?)`：`format ∈ {pdf, xml, text, landing}`；
-  `locator` 必须等于 `meta.name`；url 必须 http(s)。
-- `landing` 候选仅作闭源兜底展示，不会被下载。
-- 排序由 FetchService 统一执行（格式匹配 > 来源可信度 > license）；去重按 (url, format)。
+- `FullTextCandidate(url, format, locator, downloaders?, license?)`：`format ∈ {pdf, xml, text, landing}`；
+  `locator` 是插件名列表，Locator 应传入 `[meta.name]`；url 必须 http(s)。`downloaders`
+  是由 FetchService 计算的有序推荐下载器列表，插件通常无需填写。
+- `landing` 候选仅作闭源兜底展示，不会被下载，`downloaders` 为空。
+- 排序由 FetchService 统一执行（格式匹配 > 来源可信度 > license）；去重按 (url, format)，
+  同键候选合并 locator/downloaders 有序并集。
 
 ### Downloader
 
@@ -104,11 +106,13 @@ class MyDownloader:
     def download(self, candidate: FullTextCandidate) -> Artifact: ...
 ```
 
-- `supports()` 按 URL 前缀 / `candidate.locator` 判断；专用下载器先于通用 `http_direct` 被路由。
+- `supports()` 按 URL 前缀 / `meta.name in candidate.locator` 判断；FetchService 按候选的
+  `downloaders` 推荐顺序路由，专用下载器先于通用 `http_direct`；显式 `--downloader` 可覆盖。
 - `Artifact(format, content, source_url, downloader, license?)`：`downloader == meta.name`。
 - 魔数（PDF `%PDF` + ≥1KB）、XML 合法性（defusedxml + 根 `article`）、体积校验由
   FetchService 统一执行，插件无需重复；若上游返回打包格式，只能在内存解包，不落盘解压。
-- 普通 HTTP 直链无需写下载器：`http_direct` 已覆盖。
+- 普通 HTTP 直链无需写下载器：内置仅保留 `http_direct`，Europe PMC、PMC S3 和其他 HTTP(S)
+  全文直链都由它下载；第三方仍可注册专用 Downloader。
 
 ### Extractor
 
@@ -145,7 +149,7 @@ class MyExtractor:
 - `Paper.oa_status ∈ {gold, green, hybrid, bronze, closed, unknown}`；
   预印本记 `green`，`publication_type="preprint"`。
 - 搜索/补全响应里若带 OA 全文直链（PDF/XML），映射时填入 `Paper.fulltext_links`
-  （`FullTextCandidate(url, format, locator=meta.name, license)`）；FetchService 会将其
+  （`FullTextCandidate(url, format, locator=[meta.name], license)`）；FetchService 会将其
   并入候选池，省掉定位阶段的重复请求。参考 openalex/semantic_scholar/europepmc 映射。
 - 密钥只从 `ctx.config.plugin_config("<name>")` 或环境变量读取；
   **禁止出现在日志、测试夹具与 JSON 输出**。
@@ -190,7 +194,7 @@ paper-tools config set plugins.mysource.server prod
 | 全部 | meta.name/version 非空 |
 | Searcher | source==meta.name；len(items)<=limit；item 有 title+identifiers |
 | MetadataProvider | id_kinds 非空；enrich 返回 Paper |
-| Locator | candidate.url 为 http(s)；candidate.locator==meta.name |
+| Locator | candidate.url 为 http(s)；`meta.name in candidate.locator` |
 | Downloader | formats 非空；artifact.format∈formats；content 非空；downloader==meta.name |
 | Extractor | source_formats 非空；各格式产出非空 str |
 
@@ -209,7 +213,7 @@ paper-tools sources          # 自动注册
 
 - 包名建议 `paper-tools-<source>`；entry-point 名与 `PluginMeta.name` 一致且全局唯一
   （与内置插件同名会覆盖并告警——这是有意的替换机制，请在 README 声明）。
-- 语义化版本；接口演进见主仓库 CHANGELOG（schema 1.1 已冻结，JSON 字段变更视为破坏性：
+- 语义化版本；接口演进见主仓库 CHANGELOG（schema 1.2 已冻结，JSON 字段变更视为破坏性：
   提升 `SCHEMA_VERSION`、重新生成快照、CHANGELOG 标注）。
 - 主包 PyPI 分发名为 `paper-tools-cli`（`paper-search` 已被占用；`paper-tools` 与已有
   `papertools` 规范化同名被拒），但模块仍是 `paper_tools`、命令仍是 `paper-tools`，

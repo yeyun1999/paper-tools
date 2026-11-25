@@ -1,10 +1,10 @@
-"""Europe PMC plugin: Searcher + MetadataProvider + Locator + Downloader (REST API)."""
+"""Europe PMC plugin: Searcher + MetadataProvider + Locator (REST API)."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from paper_tools.core.models import Artifact, Author, FullTextCandidate, Paper, SearchPage
+from paper_tools.core.models import Author, FullTextCandidate, Paper, SearchPage
 from paper_tools.core.plugins import PluginContext, PluginMeta
 from paper_tools.core.query import Query
 
@@ -50,11 +50,11 @@ def _fulltext_links(record: dict[str, Any]) -> list[FullTextCandidate]:
         if not url or entry.get("availabilityCode") != "OA":
             continue
         if style in ("pdf", "xml"):
-            links.append(FullTextCandidate(url=url, format=style, locator="europepmc"))
+            links.append(FullTextCandidate(url=url, format=style, locator=["europepmc"]))
     pmcid = record.get("pmcid")
     if pmcid and record.get("inEPMC") == "Y":
         links.append(
-            FullTextCandidate(url=fulltext_xml_url(pmcid), format="xml", locator="europepmc")
+            FullTextCandidate(url=fulltext_xml_url(pmcid), format="xml", locator=["europepmc"])
         )
     return links
 
@@ -170,30 +170,7 @@ class EuropePmcLocator(_EuropePmcBase):
             FullTextCandidate(
                 url=fulltext_xml_url(pmcid),
                 format="xml",
-                locator="europepmc",
+                locator=["europepmc"],
                 license=record.get("license"),
             )
         ]
-
-
-class EuropePmcDownloader:
-    meta = PluginMeta(
-        name="europepmc", version="0.1.0", description="Europe PMC fullTextXML downloader"
-    )
-    formats = frozenset({"xml"})
-
-    def __init__(self, ctx: PluginContext) -> None:
-        self.ctx = ctx
-
-    def supports(self, candidate: FullTextCandidate) -> bool:
-        return candidate.url.startswith(_REST_BASE) and candidate.url.endswith("/fullTextXML")
-
-    def download(self, candidate: FullTextCandidate) -> Artifact:
-        content = self.ctx.http.get_bytes(candidate.url)
-        return Artifact(
-            format="xml",
-            content=content,
-            source_url=candidate.url,
-            downloader="europepmc",
-            license=candidate.license,
-        )

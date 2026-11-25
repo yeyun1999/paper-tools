@@ -198,4 +198,4 @@ jobs:
           uv tool run --from "paper-tools-cli==$VERSION" paper-tools --version \
             | grep -Fx "paper-tools $VERSION"
           uv tool run --from "paper-tools-cli==$VERSION" paper-tools sources --json \
-            | grep -F '"schema_version": "1.1"'
+            | grep -F '"schema_version": "1.2"'

@@ -101,23 +101,29 @@ class FakeLocator:
         if doi == "10.1000/closed":
             return [
                 FullTextCandidate(
-                    url="https://example.org/landing", format="landing", locator="fake"
+                    url="https://example.org/landing", format="landing", locator=["fake"]
                 )
             ]
         if doi == "10.1000/badpdf":
             return [
-                FullTextCandidate(url="https://example.org/bad.pdf", format="pdf", locator="fake"),
-                FullTextCandidate(url="https://example.org/good.pdf", format="pdf", locator="fake"),
+                FullTextCandidate(
+                    url="https://example.org/bad.pdf", format="pdf", locator=["fake"]
+                ),
+                FullTextCandidate(
+                    url="https://example.org/good.pdf", format="pdf", locator=["fake"]
+                ),
             ]
         return [
             FullTextCandidate(
                 url="https://example.org/paper.pdf",
                 format="pdf",
-                locator="fake",
+                locator=["fake"],
                 license="cc-by",
             ),
-            FullTextCandidate(url="https://example.org/paper.xml", format="xml", locator="fake"),
-            FullTextCandidate(url="https://example.org/landing", format="landing", locator="fake"),
+            FullTextCandidate(url="https://example.org/paper.xml", format="xml", locator=["fake"]),
+            FullTextCandidate(
+                url="https://example.org/landing", format="landing", locator=["fake"]
+            ),
         ]
 
 

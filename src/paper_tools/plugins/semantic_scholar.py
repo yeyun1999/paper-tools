@@ -59,7 +59,7 @@ def _paper_to_paper(record: dict[str, Any]) -> Paper:
             FullTextCandidate(
                 url=oa_pdf["url"],
                 format="pdf",
-                locator="semantic_scholar",
+                locator=["semantic_scholar"],
                 license=oa_pdf.get("license"),
             )
         )

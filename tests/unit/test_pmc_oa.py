@@ -1,4 +1,4 @@
-"""PMC Article Datasets plugin tests: ID conversion, AWS metadata, direct files."""
+"""PMC Article Datasets Locator tests: ID conversion and AWS metadata."""
 
 from __future__ import annotations
 
@@ -6,10 +6,9 @@ import httpx
 import pytest
 import respx
 
-from paper_tools.core.models import FullTextCandidate, Paper
+from paper_tools.core.models import Paper
 from paper_tools.core.plugins import PluginContext
-from paper_tools.plugins.pmc_oa import IDCONV, S3_BASE, PmcOaDownloader, PmcOaLocator
-from tests.conftest import PDF_BYTES, XML_BYTES
+from paper_tools.plugins.pmc_oa import IDCONV, S3_BASE, PmcOaLocator
 
 VERSION = "PMC123.1"
 PDF_URL = f"{S3_BASE}/{VERSION}/{VERSION}.pdf"
@@ -50,7 +49,7 @@ def test_locator_yields_direct_pdf_and_xml(plugin_ctx: PluginContext) -> None:
         (f"{PDF_URL}?md5=pdf-md5", "pdf"),
         (f"{XML_URL}?md5=xml-md5", "xml"),
     }
-    assert all(c.locator == "pmc_oa" for c in candidates)
+    assert all(c.locator == ["pmc_oa"] for c in candidates)
     assert all(c.license == "CC BY-NC-ND" for c in candidates)
 
 
@@ -106,29 +105,3 @@ def test_locator_embargoed_record(plugin_ctx: PluginContext) -> None:
 
 def test_locator_no_identifiers(plugin_ctx: PluginContext) -> None:
     assert PmcOaLocator(plugin_ctx).resolve(Paper()) == []
-
-
-@respx.mock
-@pytest.mark.parametrize(("fmt", "expected"), [("xml", XML_BYTES), ("pdf", PDF_BYTES)])
-def test_downloader_fetches_direct_file(
-    plugin_ctx: PluginContext, fmt: str, expected: bytes
-) -> None:
-    url = PDF_URL if fmt == "pdf" else XML_URL
-    respx.get(url).mock(return_value=httpx.Response(200, content=expected))
-    candidate = FullTextCandidate(url=url, format=fmt, locator="pmc_oa")  # type: ignore[arg-type]
-    artifact = PmcOaDownloader(plugin_ctx).download(candidate)
-    assert artifact.content == expected
-    assert artifact.downloader == "pmc_oa"
-
-
-def test_supports_only_pmc_dataset_candidates(plugin_ctx: PluginContext) -> None:
-    downloader = PmcOaDownloader(plugin_ctx)
-    assert downloader.supports(FullTextCandidate(url=PDF_URL, format="pdf", locator="pmc_oa"))
-    assert not downloader.supports(
-        FullTextCandidate(url=PDF_URL, format="pdf", locator="unpaywall")
-    )
-    assert not downloader.supports(
-        FullTextCandidate(
-            url="https://example.org/PMC123.1.pdf", format="pdf", locator="pmc_oa"
-        )
-    )

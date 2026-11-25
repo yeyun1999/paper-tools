@@ -36,14 +36,14 @@ def test_locator_contract(services: Services) -> None:
         for candidate in plugin.resolve(paper):
             assert isinstance(candidate, FullTextCandidate)
             assert candidate.url.startswith(("http://", "https://"))
-            assert candidate.locator == plugin.meta.name
+            assert plugin.meta.name in candidate.locator
 
 
 def test_downloader_contract(services: Services) -> None:
     for plugin in services.registry.list("downloader"):
         assert plugin.formats
         candidate = FullTextCandidate(
-            url="https://example.org/paper.pdf", format="pdf", locator="fake"
+            url="https://example.org/paper.pdf", format="pdf", locator=["fake"]
         )
         if plugin.supports(candidate):
             artifact = plugin.download(candidate)

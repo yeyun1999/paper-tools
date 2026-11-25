@@ -13,7 +13,7 @@ from paper_tools.core.errors import (
     UpstreamError,
     UsageError,
 )
-from paper_tools.core.models import ArtifactFormat, FullTextCandidate, Paper, SearchPage
+from paper_tools.core.models import Artifact, ArtifactFormat, FullTextCandidate, Paper, SearchPage
 from paper_tools.core.plugins import PluginMeta
 from paper_tools.core.query import Query
 from paper_tools.core.services import Services
@@ -310,9 +310,9 @@ def test_fetch_dedup_keeps_formats_per_url(services: Services, tmp_path: Path) -
         def resolve(self, paper: Paper) -> list[FullTextCandidate]:
             url = "https://example.org/package.tar.gz"
             return [
-                FullTextCandidate(url=url, format="pdf", locator="sameurl"),
-                FullTextCandidate(url=url, format="xml", locator="sameurl"),
-                FullTextCandidate(url=url, format="xml", locator="sameurl"),  # duplicate
+                FullTextCandidate(url=url, format="pdf", locator=["sameurl"]),
+                FullTextCandidate(url=url, format="xml", locator=["sameurl"]),
+                FullTextCandidate(url=url, format="xml", locator=["sameurl"]),  # duplicate
             ]
 
     services.registry.register("locator", SameUrlLocator())
@@ -328,7 +328,9 @@ class _PdfOnlyLocator:
 
     def resolve(self, paper: Paper) -> list[FullTextCandidate]:
         return [
-            FullTextCandidate(url="https://example.org/other.pdf", format="pdf", locator="pdfonly")
+            FullTextCandidate(
+                url="https://example.org/other.pdf", format="pdf", locator=["pdfonly"]
+            )
         ]
 
 
@@ -372,6 +374,100 @@ def test_locate_returns_ranked_candidates(services: Services) -> None:
     assert result.paper.title == "CRISPR base editing review"
     assert [candidate.format for candidate in result.candidates] == ["pdf", "xml", "landing"]
     assert result.candidates[0].url == "https://example.org/paper.pdf"
+    assert result.candidates[0].locator == ["fake"]
+    assert result.candidates[0].downloaders == ["fake_dl"]
+    assert result.candidates[2].downloaders == []
+
+
+def test_locate_merges_locators_for_same_url(services: Services) -> None:
+    class FirstLocator:
+        meta = PluginMeta(name="first", version="0.1.0")
+
+        def resolve(self, paper: Paper) -> list[FullTextCandidate]:
+            return [
+                FullTextCandidate(
+                    url="https://example.org/shared.pdf",
+                    format="pdf",
+                    locator=["first"],
+                )
+            ]
+
+    class SecondLocator:
+        meta = PluginMeta(name="second", version="0.1.0")
+
+        def resolve(self, paper: Paper) -> list[FullTextCandidate]:
+            return [
+                FullTextCandidate(
+                    url="https://example.org/shared.pdf",
+                    format="pdf",
+                    locator=["second"],
+                    license="cc-by",
+                )
+            ]
+
+    services.registry.register("locator", FirstLocator())
+    services.registry.register("locator", SecondLocator())
+    result, _ = services.fetch.locate("doi:10.1000/fake1", locators=["first", "second"])
+    candidate = next(c for c in result.candidates if c.url.endswith("shared.pdf"))
+    assert candidate.locator == ["first", "second"]
+    assert candidate.downloaders == ["fake_dl"]
+    assert candidate.license == "cc-by"
+
+
+def test_fetch_uses_candidate_downloader_order(services: Services, tmp_path: Path) -> None:
+    calls: list[str] = []
+
+    class FirstDownloader:
+        meta = PluginMeta(name="first", version="0.1.0")
+        formats = frozenset({"pdf"})
+
+        def supports(self, candidate: FullTextCandidate) -> bool:
+            return True
+
+        def download(self, candidate: FullTextCandidate) -> Artifact:
+            calls.append("first")
+            raise UpstreamError("first failed")
+
+    class SecondDownloader:
+        meta = PluginMeta(name="second", version="0.1.0")
+        formats = frozenset({"pdf"})
+
+        def supports(self, candidate: FullTextCandidate) -> bool:
+            return True
+
+        def download(self, candidate: FullTextCandidate) -> Artifact:
+            calls.append("second")
+            return Artifact(
+                format="pdf",
+                content=PDF_BYTES,
+                source_url=candidate.url,
+                downloader="second",
+            )
+
+    class OrderedLocator:
+        meta = PluginMeta(name="ordered", version="0.1.0")
+
+        def resolve(self, paper: Paper) -> list[FullTextCandidate]:
+            return [
+                FullTextCandidate(
+                    url="https://example.org/ordered.pdf",
+                    format="pdf",
+                    locator=["ordered"],
+                    downloaders=["first", "second"],
+                )
+            ]
+
+    services.registry.register("downloader", FirstDownloader())
+    services.registry.register("downloader", SecondDownloader())
+    services.registry.register("locator", OrderedLocator())
+    result, warnings = services.fetch.fetch(
+        "doi:10.1000/fake1",
+        output=tmp_path / "ordered.pdf",
+        locators=["ordered"],
+    )
+    assert calls == ["first", "second"]
+    assert result.downloader == "second"
+    assert "first: first failed" in warnings
 
 
 def test_locate_filters_formats(services: Services) -> None:
@@ -639,7 +735,7 @@ def test_fetch_uses_paper_fulltext_links(services: Services, tmp_path: Path) -> 
                 identifiers=paper.identifiers,
                 fulltext_links=[
                     FullTextCandidate(
-                        url="https://example.org/seed.pdf", format="pdf", locator="linkmeta"
+                        url="https://example.org/seed.pdf", format="pdf", locator=["linkmeta"]
                     )
                 ],
             )

@@ -110,7 +110,7 @@ def test_search_captures_oa_pdf_link(plugin_ctx: PluginContext) -> None:
     )
     page = SemanticScholarSearcher(plugin_ctx).search(Query(text="CRISPR"), limit=1)
     links = page.items[0].fulltext_links
-    assert [(link.url, link.format, link.locator) for link in links] == [
-        ("https://pub.org/paper.pdf", "pdf", "semantic_scholar")
+    assert [(link.url, link.format, tuple(link.locator)) for link in links] == [
+        ("https://pub.org/paper.pdf", "pdf", ("semantic_scholar",))
     ]
     assert links[0].license == "cc-by"

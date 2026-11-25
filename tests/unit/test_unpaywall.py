@@ -54,7 +54,7 @@ def test_locator_candidates(unpaywall_ctx: PluginContext) -> None:
     candidates = UnpaywallLocator(unpaywall_ctx).resolve(Paper(identifiers={"doi": "10.1234/abc"}))
     assert candidates[0].url == "https://pub.org/paper.pdf"
     assert candidates[0].format == "pdf"
-    assert candidates[0].locator == "unpaywall"
+    assert candidates[0].locator == ["unpaywall"]
     assert candidates[0].license == "cc-by"
     urls = {(c.url, c.format) for c in candidates}
     assert ("https://pub.org/paper", "landing") in urls
@@ -132,20 +132,18 @@ def test_locator_resolves_pmc_repository_copy(unpaywall_ctx: PluginContext) -> N
             },
         )
     )
-    candidates = UnpaywallLocator(unpaywall_ctx).resolve(
-        Paper(identifiers={"doi": "10.1234/abc"})
-    )
-    urls = {(candidate.url, candidate.format, candidate.locator) for candidate in candidates}
-    assert ("https://pub.org/paper.pdf", "pdf", "unpaywall") in urls
+    candidates = UnpaywallLocator(unpaywall_ctx).resolve(Paper(identifiers={"doi": "10.1234/abc"}))
+    urls = {(candidate.url, candidate.format, tuple(candidate.locator)) for candidate in candidates}
+    assert ("https://pub.org/paper.pdf", "pdf", ("unpaywall",)) in urls
     assert (
         f"{S3_BASE}/PMC123.1/PMC123.1.pdf?md5=pdf-md5",
         "pdf",
-        "pmc_oa",
+        ("pmc_oa", "unpaywall"),
     ) in urls
     assert (
         f"{S3_BASE}/PMC123.1/PMC123.1.xml?md5=xml-md5",
         "xml",
-        "pmc_oa",
+        ("pmc_oa", "unpaywall"),
     ) in urls
 
 
@@ -160,9 +158,7 @@ def test_pmc_lookup_failure_keeps_unpaywall_candidates(unpaywall_ctx: PluginCont
     }
     respx.get(DOI_URL).mock(return_value=httpx.Response(200, json=payload))
     respx.get(IDCONV).mock(return_value=httpx.Response(500))
-    candidates = UnpaywallLocator(unpaywall_ctx).resolve(
-        Paper(identifiers={"doi": "10.1234/abc"})
-    )
+    candidates = UnpaywallLocator(unpaywall_ctx).resolve(Paper(identifiers={"doi": "10.1234/abc"}))
     assert any(candidate.url == "https://pub.org/paper.pdf" for candidate in candidates)
 
 

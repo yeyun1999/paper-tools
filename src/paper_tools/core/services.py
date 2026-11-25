@@ -37,6 +37,7 @@ from paper_tools.core.models import (
     Paper,
     SearchPage,
     is_complete,
+    merge_candidate,
     merge_papers,
     parse_identifier,
 )
@@ -457,7 +458,8 @@ class FetchService:
             output = Path(f"{_filename_slug(stem)}{_FORMAT_EXTENSIONS[fmt]}")
         output_path, artifact_format = self._resolve_output(fmt, output)
         output_path = cast(Path, output_path)
-        candidate = FullTextCandidate(url=url, format=artifact_format, locator="user")
+        candidate = FullTextCandidate(url=url, format=artifact_format, locator=["user"])
+        candidate.downloaders = self._recommended_downloader_names(candidate)
         attempts: list[str] = []
         artifact = self._download(candidate, downloader, attempts)
         if artifact is None:
@@ -586,15 +588,19 @@ class FetchService:
             if names
             else [cast(Locator, p) for p in self._registry.list("locator")]
         )
-        seen: set[tuple[str, str]] = set()
-        candidates: list[FullTextCandidate] = []
+        collected: dict[tuple[str, str], FullTextCandidate] = {}
+
+        def add(candidate: FullTextCandidate) -> None:
+            key = (candidate.url, candidate.format)
+            if key in collected:
+                collected[key] = merge_candidate(collected[key], candidate)
+            else:
+                collected[key] = candidate.model_copy(deep=True)
+
         # Links captured at search/enrich time seed the pool; locators still run
         # for fallback diversity (merge, not short-circuit).
         for link in paper.fulltext_links:
-            key = (link.url, link.format)
-            if key not in seen:
-                seen.add(key)
-                candidates.append(link)
+            add(link)
         for loc in plugins:
             try:
                 resolved = loc.resolve(paper)
@@ -604,10 +610,11 @@ class FetchService:
                 warnings.append(f"{loc.meta.name}: {exc.message}")
                 continue
             for candidate in resolved:
-                key = (candidate.url, candidate.format)
-                if key not in seen:
-                    seen.add(key)
-                    candidates.append(candidate)
+                add(candidate)
+        candidates = list(collected.values())
+        for candidate in candidates:
+            if not candidate.downloaders:
+                candidate.downloaders = self._recommended_downloader_names(candidate)
         return candidates
 
     def _rank(
@@ -618,9 +625,8 @@ class FetchService:
                 format_score = {"xml": 0, "text": 1, "pdf": 2}.get(c.format, 3)
             else:
                 format_score = 0 if c.format == fmt else 1
-            trust_score = (
-                0 if c.locator in _TRUSTED_LOCATORS else 1 if c.locator == "unpaywall" else 2
-            )
+            locators = set(c.locator)
+            trust_score = 0 if locators & _TRUSTED_LOCATORS else 1 if "unpaywall" in locators else 2
             license_score = 0 if c.license else 1
             return (format_score, trust_score, license_score)
 
@@ -634,6 +640,18 @@ class FetchService:
             return candidate.format in {"pdf", "xml", "text"}
         return candidate.format == fmt
 
+    def _matching_downloaders(self, candidate: FullTextCandidate) -> list[Downloader]:
+        downloaders = [
+            cast(Downloader, d)
+            for d in self._registry.list("downloader")
+            if candidate.format in d.formats and d.supports(candidate)
+        ]
+        # specific downloaders before the generic http_direct fallback
+        return sorted(downloaders, key=lambda d: d.meta.name == "http_direct")
+
+    def _recommended_downloader_names(self, candidate: FullTextCandidate) -> list[str]:
+        return [downloader.meta.name for downloader in self._matching_downloaders(candidate)]
+
     def _downloaders_for(
         self, candidate: FullTextCandidate, forced: str | None
     ) -> list[Downloader]:
@@ -644,13 +662,16 @@ class FetchService:
                     f"Downloader {forced!r} does not support candidate {candidate.url}"
                 )
             return [dl]
-        downloaders = [
-            cast(Downloader, d)
-            for d in self._registry.list("downloader")
-            if candidate.format in d.formats and d.supports(candidate)
-        ]
-        # specific downloaders before the generic http_direct fallback
-        return sorted(downloaders, key=lambda d: d.meta.name == "http_direct")
+        names = candidate.downloaders or self._recommended_downloader_names(candidate)
+        downloaders: list[Downloader] = []
+        for name in dict.fromkeys(names):
+            try:
+                downloader = cast(Downloader, self._registry.get("downloader", name))
+            except UsageError:
+                continue
+            if candidate.format in downloader.formats and downloader.supports(candidate):
+                downloaders.append(downloader)
+        return downloaders
 
     def _cached_artifact(
         self, candidate: FullTextCandidate, fmt: ArtifactFormat

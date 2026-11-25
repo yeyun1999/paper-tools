@@ -70,7 +70,7 @@ def _work_to_paper(work: dict[str, Any]) -> Paper:
     if best.get("pdf_url"):
         links.append(
             FullTextCandidate(
-                url=best["pdf_url"], format="pdf", locator="openalex", license=best.get("license")
+                url=best["pdf_url"], format="pdf", locator=["openalex"], license=best.get("license")
             )
         )
     if best.get("landing_page_url"):
@@ -78,7 +78,7 @@ def _work_to_paper(work: dict[str, Any]) -> Paper:
             FullTextCandidate(
                 url=best["landing_page_url"],
                 format="landing",
-                locator="openalex",
+                locator=["openalex"],
                 license=best.get("license"),
             )
         )
@@ -211,7 +211,7 @@ class OpenAlexLocator(_OpenAlexBase):
                 FullTextCandidate(
                     url=best["pdf_url"],
                     format="pdf",
-                    locator="openalex",
+                    locator=["openalex"],
                     license=best.get("license"),
                 )
             )
@@ -220,7 +220,7 @@ class OpenAlexLocator(_OpenAlexBase):
                 FullTextCandidate(
                     url=best["landing_page_url"],
                     format="landing",
-                    locator="openalex",
+                    locator=["openalex"],
                     license=best.get("license"),
                 )
             )

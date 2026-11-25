@@ -53,7 +53,7 @@ def test_builtin_discovery(ctx: PluginContext) -> None:
     )
     assert "pubmed" in registry.names("metadata")
     assert {"europepmc", "pmc_oa", "unpaywall", "openalex"} <= set(registry.names("locator"))
-    assert {"europepmc", "pmc_oa", "http_direct"} <= set(registry.names("downloader"))
+    assert registry.names("downloader") == ["http_direct"]
     assert "jats" in registry.names("extractor")
 
 
@@ -86,7 +86,7 @@ def test_fetch_xml_live(live_services: Services, tmp_path: Path) -> None:
     result, _ = live_services.fetch.fetch(f"pmcid:{pmcid}", fmt="xml", output=tmp_path / "out.xml")
     assert result.path.exists()
     assert b"article" in result.path.read_bytes()[:500]
-    assert result.downloader in {"europepmc", "pmc_oa", "http_direct", "cache"}
+    assert result.downloader in {"http_direct", "cache"}
 
 
 def test_fetch_pdf_live(live_services: Services, tmp_path: Path) -> None:
@@ -111,9 +111,7 @@ def test_fetch_pdf_live(live_services: Services, tmp_path: Path) -> None:
     pytest.fail(f"no OA PDF retrievable from {len(pmcids)} PLOS ONE candidates: {errors}")
 
 
-@pytest.mark.parametrize(
-    "identifier", ["pmcid:PMC8851247", "doi:10.1016/j.psj.2021.101646"]
-)
+@pytest.mark.parametrize("identifier", ["pmcid:PMC8851247", "doi:10.1016/j.psj.2021.101646"])
 def test_pmc_aws_pdf_regression_live(ctx: PluginContext, tmp_path: Path, identifier: str) -> None:
     registry = PluginRegistry.discover(ctx)
     services = Services(config=ctx.config, cache=ctx.cache, registry=registry)
@@ -122,7 +120,7 @@ def test_pmc_aws_pdf_regression_live(ctx: PluginContext, tmp_path: Path, identif
     )
     assert result.path.read_bytes().startswith(b"%PDF")
     assert result.source_url.startswith("https://pmc-oa-opendata.s3.amazonaws.com/")
-    assert result.downloader == "pmc_oa"
+    assert result.downloader == "http_direct"
     assert not warnings
 
 
@@ -236,7 +234,7 @@ def test_fulltext_links_live(ctx: PluginContext) -> None:
     except UpstreamError as exc:
         pytest.skip(f"OpenAlex unavailable (status={exc.details.get('status', 'network')})")
     assert any(link.format == "pdf" for link in paper.fulltext_links)
-    assert all(link.locator == "openalex" for link in paper.fulltext_links)
+    assert all(link.locator == ["openalex"] for link in paper.fulltext_links)
 
 
 def test_get_batch_live() -> None:

@@ -110,4 +110,4 @@ def test_fulltext_links_from_core_record(plugin_ctx: PluginContext) -> None:
         ("https://europepmc.org/articles/PMC1000000?pdf=render", "pdf"),
         (fulltext_xml_url("PMC1000000"), "xml"),
     }
-    assert all(link.locator == "europepmc" for link in links)
+    assert all(link.locator == ["europepmc"] for link in links)

@@ -1,4 +1,4 @@
-"""Core domain models. Fields are the JSON contract (schema_version 1.1)."""
+"""Core domain models. Fields are the JSON contract (schema_version 1.2)."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ CandidateFormat = Literal["pdf", "xml", "text", "landing"]
 
 # JSON contract version. Bump on any field change (snapshot gate + CHANGELOG).
 # Also keys the metadata cache so contract bumps invalidate stale entries.
-SCHEMA_VERSION = "1.1"
+SCHEMA_VERSION = "1.2"
 
 _DOI_URL_PREFIXES = (
     "https://doi.org/",
@@ -90,8 +90,21 @@ class Author(BaseModel):
 class FullTextCandidate(BaseModel):
     url: str
     format: CandidateFormat
-    locator: str
+    locator: list[str]
+    downloaders: list[str] = Field(default_factory=list)
     license: str | None = None
+
+
+def merge_candidate(base: FullTextCandidate, incoming: FullTextCandidate) -> FullTextCandidate:
+    if (base.url, base.format) != (incoming.url, incoming.format):
+        raise ValueError("Cannot merge full-text candidates with different URLs or formats")
+    return base.model_copy(
+        update={
+            "locator": list(dict.fromkeys([*base.locator, *incoming.locator])),
+            "downloaders": list(dict.fromkeys([*base.downloaders, *incoming.downloaders])),
+            "license": base.license or incoming.license,
+        }
+    )
 
 
 class Paper(BaseModel):
@@ -215,12 +228,17 @@ def merge_papers(base: Paper, incoming: Paper, *, source: str) -> tuple[Paper, l
     for src in incoming.sources:
         if src not in merged.sources:
             merged.sources.append(src)
-    seen_links = {(link.url, link.format) for link in merged.fulltext_links}
-    for link in incoming.fulltext_links:
-        if (link.url, link.format) not in seen_links:
-            merged.fulltext_links.append(link.model_copy(deep=True))
-            seen_links.add((link.url, link.format))
-            contributed = True
+    before_links = merged.fulltext_links
+    links: dict[tuple[str, str], FullTextCandidate] = {}
+    for link in [*merged.fulltext_links, *incoming.fulltext_links]:
+        key = (link.url, link.format)
+        if key in links:
+            links[key] = merge_candidate(links[key], link)
+        else:
+            links[key] = link.model_copy(deep=True)
+    merged.fulltext_links = list(links.values())
+    if merged.fulltext_links != before_links:
+        contributed = True
     if contributed and source and source not in merged.sources:
         merged.sources.append(source)
     return merged, warnings

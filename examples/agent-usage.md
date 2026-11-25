@@ -1,6 +1,6 @@
 # AI 助理使用指南（agent-usage）
 
-paper-tools 为 AI 助理提供两条通道，共享 success/error envelope 契约（`schema_version 1.1`）：
+paper-tools 为 AI 助理提供两条通道，共享 success/error envelope 契约（`schema_version 1.2`）：
 
 1. **JSON CLI**：任意 shell 调用 `paper-tools ... --json`，按退出码分支。
 2. **MCP 服务器**：`paper-tools mcp`（stdio），四个工具，返回同样的 envelope。
@@ -49,9 +49,10 @@ uv run paper-tools get doi:10.1038/s41586-020-2649-2 --fields title,doi,abstract
 uv run paper-tools get pmid:38308006 doi:10.1038/s41586-020-2649-2 --fields title,doi,year --json
 ```
 
-Paper 的 `fulltext_links` 字段（schema 1.1）在搜索/补全期就捕获源生的 OA 全文链接
-（url/format/locator/license），AI 助理可据此直接判断全文可得性，无需先 fetch；
-`fetch` 也会把这些链接并入候选池。
+Paper 的 `fulltext_links` 字段自 schema 1.1 起在搜索/补全期捕获源生 OA 全文链接；
+schema 1.2 将候选的 `locator` 改为来源列表，并新增有序的 `downloaders` 推荐列表
+（url/format/locator/downloaders/license）。AI 助理可据此直接判断全文可得性并选择下载器；
+`fetch` 会按推荐顺序尝试下载，`--downloader` 可强制覆盖。
 
 ```bash
 # 一键 OA 全文：pdf / xml / text（text 走 下载→提取 流水线，优先 XML）
@@ -81,10 +82,10 @@ uv run paper-tools schema fetch          # FullText 的 JSON Schema
 
 ```json
 {
-  "schema_version": "1.1",
+  "schema_version": "1.2",
   "command": "fetch",
   "data": { "path": "papers/10.1093_nar_gkag769.txt", "format": "text",
-            "sha256": "…", "source_url": "…", "downloader": "europepmc",
+            "sha256": "…", "source_url": "…", "downloader": "http_direct",
             "extractor": "jats", "extracted_from": "xml" },
   "warnings": []
 }

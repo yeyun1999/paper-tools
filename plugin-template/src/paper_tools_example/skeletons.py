@@ -11,7 +11,7 @@ from paper_tools.core.plugins import PluginContext, PluginMeta
 
 
 class ExampleLocator:
-    """定位 OA 副本：返回候选列表（url + format + locator 名）。"""
+    """定位 OA 副本：返回候选列表（url + format + locator 列表）。"""
 
     meta = PluginMeta(name="example", version="0.1.0", description="Template OA locator")
 
@@ -34,8 +34,8 @@ class ExampleDownloader:
         self.ctx = ctx
 
     def supports(self, candidate: FullTextCandidate) -> bool:
-        # 按 URL 前缀/locator 名判断是否由本下载器处理（专用先于通用）。
-        return candidate.locator == self.meta.name
+        # 按 URL 前缀 / locator 列表判断是否由本下载器处理（专用先于通用）。
+        return self.meta.name in candidate.locator
 
     def download(self, candidate: FullTextCandidate) -> Artifact:
         # TODO: 特殊协议（如 tar.gz 打包）在此实现；内存解包，不落盘解压。

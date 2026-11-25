@@ -69,8 +69,8 @@
 
 - [x] `plugins/unpaywall.py`：Locator（OA 副本定位）+ MetadataProvider（只补 oa_status/license）；email 配置校验，缺失→退出码 5
 - [x] `plugins/http_direct.py`：通用 Downloader（魔数/体积/XML 校验由 FetchService 统一执行），落盘、sha256
-- [x] `plugins/pmc_oa.py`：Locator（PMC ID Converter + AWS Article Datasets）+ Downloader（单篇 PDF/XML 直链）
-- [x] `plugins/europepmc.py` 增加 Locator + Downloader：fullTextXML（PDF 直链由 pmc_oa/unpaywall 覆盖）
+- [x] `plugins/pmc_oa.py`：Locator（PMC ID Converter + AWS Article Datasets）；实际下载统一由 `http_direct` 完成
+- [x] `plugins/europepmc.py` 增加 Locator：fullTextXML（实际下载统一由 `http_direct` 完成）
 - [x] `plugins/jats.py`：Extractor（XML→纯文本，内置）；`plugins/pypdf_extractor.py`：Extractor（PDF→纯文本，extra `text`）
 - [x] FetchService 编排落地：去重（URL+格式）、排序（格式>可信度>license）、supports() 路由、降级、landing 兜底、提取阶段
 - [x] CLI `fetch`：--format/--output/--locator/--downloader/--extractor、默认使用安全化文章标题（重名追加 ID）、按扩展名推断格式（初版支持批量 NDJSON，现改为单篇输入）

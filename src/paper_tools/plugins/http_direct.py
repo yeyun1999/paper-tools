@@ -1,4 +1,4 @@
-"""Generic HTTP downloader: last-resort transfer for any direct http(s) URL."""
+"""Generic HTTP(S) downloader for direct full-text URLs."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from paper_tools.core.plugins import PluginContext, PluginMeta
 
 class HttpDirectDownloader:
     meta = PluginMeta(
-        name="http_direct", version="0.1.0", description="Plain HTTP(S) download fallback"
+        name="http_direct", version="0.1.0", description="Direct HTTP(S) full-text downloader"
     )
     formats = frozenset({"pdf", "xml", "text"})
 

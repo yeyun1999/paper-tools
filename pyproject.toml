@@ -71,8 +71,6 @@ unpaywall = "paper_tools.plugins.unpaywall:UnpaywallLocator"
 openalex = "paper_tools.plugins.openalex:OpenAlexLocator"
 
 [project.entry-points."paper_tools.downloaders"]
-europepmc = "paper_tools.plugins.europepmc:EuropePmcDownloader"
-pmc_oa = "paper_tools.plugins.pmc_oa:PmcOaDownloader"
 http_direct = "paper_tools.plugins.http_direct:HttpDirectDownloader"
 
 [project.entry-points."paper_tools.extractors"]

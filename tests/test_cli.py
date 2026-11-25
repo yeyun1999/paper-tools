@@ -238,6 +238,9 @@ def test_locate_json(cli: CliRunner) -> None:
     assert payload["command"] == "locate"
     assert payload["data"]["paper"]["title"] == "CRISPR base editing review"
     assert [c["format"] for c in payload["data"]["candidates"]] == ["pdf", "xml", "landing"]
+    assert payload["data"]["candidates"][0]["locator"] == ["fake"]
+    assert payload["data"]["candidates"][0]["downloaders"] == ["fake_dl"]
+    assert payload["data"]["candidates"][2]["downloaders"] == []
 
 
 def test_locate_format_filter(cli: CliRunner) -> None:
@@ -253,6 +256,8 @@ def test_locate_human_output(cli: CliRunner) -> None:
     assert "CRISPR base editing review" in result.stdout
     assert "https://example.org/paper.pdf" in result.stdout
     assert "landing" in result.stdout
+    assert "Downloaders" in result.stdout
+    assert "fake_dl" in result.stdout
 
 
 def test_download_json(cli: CliRunner, tmp_path: Path) -> None:
@@ -469,8 +474,9 @@ def test_help_lists_available_plugins_and_descriptions() -> None:
     for name in ("europepmc", "openalex", "pmc_oa", "unpaywall"):
         assert name in locate_help
     download_help = runner.invoke(app, ["download", "--help"]).stdout
-    for name in ("europepmc", "http_direct", "pmc_oa"):
-        assert name in download_help
+    assert "http_direct" in download_help
+    assert "europepmc" not in download_help
+    assert "pmc_oa" not in download_help
     extract_help = runner.invoke(app, ["extract", "--help"]).stdout
     for name in ("jats", "pypdf"):
         assert name in extract_help

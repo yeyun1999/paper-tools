@@ -18,12 +18,12 @@ from paper_tools.core.models import (
 def test_merge_unions_fulltext_links() -> None:
     base = Paper(
         title="T",
-        fulltext_links=[FullTextCandidate(url="https://a.org/p.pdf", format="pdf", locator="x")],
+        fulltext_links=[FullTextCandidate(url="https://a.org/p.pdf", format="pdf", locator=["x"])],
     )
     incoming = Paper(
         fulltext_links=[
-            FullTextCandidate(url="https://a.org/p.pdf", format="pdf", locator="y"),  # dup
-            FullTextCandidate(url="https://a.org/p.xml", format="xml", locator="y"),
+            FullTextCandidate(url="https://a.org/p.pdf", format="pdf", locator=["y"]),  # dup
+            FullTextCandidate(url="https://a.org/p.xml", format="xml", locator=["y"]),
         ]
     )
     merged, warnings = merge_papers(base, incoming, source="y")
@@ -31,8 +31,38 @@ def test_merge_unions_fulltext_links() -> None:
         ("https://a.org/p.pdf", "pdf"),
         ("https://a.org/p.xml", "xml"),
     }
+    assert merged.fulltext_links[0].locator == ["x", "y"]
     assert "y" in merged.sources
     assert not warnings
+
+
+def test_merge_unions_candidate_locators_and_downloaders() -> None:
+    base = Paper(
+        fulltext_links=[
+            FullTextCandidate(
+                url="https://a.org/p.pdf",
+                format="pdf",
+                locator=["x"],
+                downloaders=["first", "shared"],
+            )
+        ]
+    )
+    incoming = Paper(
+        fulltext_links=[
+            FullTextCandidate(
+                url="https://a.org/p.pdf",
+                format="pdf",
+                locator=["y", "x"],
+                downloaders=["second", "shared"],
+                license="cc-by",
+            )
+        ]
+    )
+    merged, _ = merge_papers(base, incoming, source="y")
+    candidate = merged.fulltext_links[0]
+    assert candidate.locator == ["x", "y"]
+    assert candidate.downloaders == ["first", "shared", "second"]
+    assert candidate.license == "cc-by"
 
 
 @pytest.mark.parametrize(

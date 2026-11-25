@@ -145,13 +145,15 @@ def render_fulltext_links(result: FullTextLinks) -> None:
     table = Table()
     table.add_column("Format")
     table.add_column("URL")
-    table.add_column("Locator")
+    table.add_column("Locators")
+    table.add_column("Downloaders")
     table.add_column("License")
     for candidate in result.candidates:
         table.add_row(
             candidate.format,
             candidate.url,
-            candidate.locator,
+            ", ".join(candidate.locator),
+            ", ".join(candidate.downloaders),
             candidate.license or "",
         )
     console.print(table)

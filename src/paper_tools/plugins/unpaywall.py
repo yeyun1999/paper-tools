@@ -11,7 +11,14 @@ from typing import Any
 from urllib.parse import quote
 
 from paper_tools.core.errors import ConfigError, PaperToolsError
-from paper_tools.core.models import Author, CandidateFormat, FullTextCandidate, OAStatus, Paper
+from paper_tools.core.models import (
+    Author,
+    CandidateFormat,
+    FullTextCandidate,
+    OAStatus,
+    Paper,
+    merge_candidate,
+)
 from paper_tools.core.plugins import PluginContext, PluginMeta
 from paper_tools.plugins.pmc_oa import resolve_pmc_candidates
 
@@ -50,7 +57,7 @@ def _location_candidates(location: dict[str, Any]) -> list[FullTextCandidate]:
                 FullTextCandidate(
                     url=url,
                     format=fmt,
-                    locator="unpaywall",
+                    locator=["unpaywall"],
                     license=license_,
                 )
             )
@@ -91,14 +98,18 @@ class UnpaywallLocator(_UnpaywallBase):
         if best:
             locations.append(best)
         locations.extend(data.get("oa_locations") or [])
-        candidates: list[FullTextCandidate] = []
-        seen: set[tuple[str, str]] = set()
+        candidates: dict[tuple[str, str], FullTextCandidate] = {}
+
+        def add(candidate: FullTextCandidate) -> None:
+            key = (candidate.url, candidate.format)
+            if key in candidates:
+                candidates[key] = merge_candidate(candidates[key], candidate)
+            else:
+                candidates[key] = candidate
+
         for location in locations:
             for candidate in _location_candidates(location):
-                key = (candidate.url, candidate.format)
-                if key not in seen:
-                    seen.add(key)
-                    candidates.append(candidate)
+                add(candidate)
             pmcid = _pmcid_from_location(location)
             if not pmcid:
                 continue
@@ -108,11 +119,12 @@ class UnpaywallLocator(_UnpaywallBase):
                 logger.warning("PMC lookup for Unpaywall location failed: %s", exc.message)
                 continue
             for candidate in pmc_candidates:
-                key = (candidate.url, candidate.format)
-                if key not in seen:
-                    seen.add(key)
-                    candidates.append(candidate)
-        return candidates
+                add(
+                    candidate.model_copy(
+                        update={"locator": list(dict.fromkeys([*candidate.locator, "unpaywall"]))}
+                    )
+                )
+        return list(candidates.values())
 
 
 class UnpaywallMetadata(_UnpaywallBase):
