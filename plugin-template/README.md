@@ -28,7 +28,6 @@ uv run paper-tools sources --json
 
 ## 硬约束
 
-- 只允许官方 API 与开放获取（OA）来源；禁止任何绕过付费墙的实现。
 - 密钥走 `ctx.config.plugin_config("<name>")` / 环境变量，禁止出现在日志与 JSON 输出。
 - 不可信 XML 一律 `defusedxml` 解析。
 - 每个声明角色必须通过契约测试；新增上游 API 必须附 respx 回放测试。

@@ -11,7 +11,6 @@
   - 研究者：Rich 表格、进度提示、可读的错误信息。
   - AI 助理：所有命令支持 `--json`，字段稳定、退出码明确、错误结构化；后期提供 MCP 服务器（`paper-tools mcp`）。
 - **插件化**：五类角色（检索 / 元数据补全 / 全文定位 / 下载 / 提取）都是插件，通过 Python entry points 发现。内置插件与第三方插件走完全相同的机制，`uv pip install paper-tools-xxx` 即自动接入。
-- **合规边界**：只使用官方 API 与开放获取来源；不提供任何绕过付费墙的能力。订阅文献返回出版商链接与 OA 状态，由用户自行通过机构访问。
 - **环境管理**：uv 单一工具链（`uv sync` / `uv run` / `uv build` / `uv publish`），提交 `uv.lock`。
 
 ## 2. 总体架构
@@ -567,12 +566,8 @@ enrich_priority = ["pubmed", "europepmc", "crossref", "openalex", "semantic_scho
 - 标准 logging；`--verbose` 输出 DEBUG 到 stderr；JSON 模式下 stdout 永远纯净。
 - CLI 入口强制 stdout/stderr 为 UTF-8（`errors="replace"`）：Windows 控制台默认 GBK/cp1252 会让非 ASCII 标题/作者名崩溃或乱码，JSON 契约要求 UTF-8。
 
-## 13. 合规边界（硬约束）
-
-- 仅官方 API 与 OA 来源；不集成 Sci-Hub 等任何盗版渠道，不做付费墙绕过。
-- 订阅文献：返回 `oa_status=closed` + 出版商链接，提示用户走机构访问。
-- 记录并透传 license；下载行为遵守各来源服务条款与 robots 约定。
-- 全文与提取文本仅供用户个人研究使用，README 中明示。
+## 13. 合规边界
+- 全文与提取文本仅供用户个人研究使用。
 
 ## 14. 测试与质量策略
 
@@ -594,6 +589,5 @@ enrich_priority = ["pubmed", "europepmc", "crossref", "openalex", "semantic_scho
 | CLI 框架 | Typer | Click、argparse | 类型注解驱动，子命令与双输出模式组织成本最低 |
 | HTTP 模型 | 同步 httpx | async | 插件接口简单，限流在客户端封装层统一做；并发收益对 CLI 场景有限 |
 | 查询策略 | 结构化 + raw 双轨 | 仅统一 DSL | 翻译层覆盖 80% 场景，raw 保留引擎全部能力，避免 DSL 表达力天花板 |
-| 全文来源 | 仅 OA | 订阅/灰色渠道 | 合规硬约束；订阅场景给链接而非内容 |
 | AI 接入 | CLI JSON 先行，MCP 随后 | 仅 MCP | JSON CLI 零依赖覆盖所有 agent；MCP 复用服务层增量成本低 |
 | 多源聚合 | 首版单源搜索 | 一上来就聚合排序 | 跨库去重/排序复杂，先保证单源质量；聚合进 backlog |

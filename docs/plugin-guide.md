@@ -222,8 +222,4 @@ paper-tools sources          # 自动注册
 
 ## 10. 合规硬约束
 
-- 只允许官方 API 与开放获取（OA）来源；**禁止任何绕过付费墙/反爬的实现**。
-  案例：bioRxiv 插件只做元数据（api.biorxiv.org 开放），www.biorxiv.org 的
-  Cloudflare 403 不做绕过，全文交由 Europe PMC（PPR）/Unpaywall 链覆盖。
-- 闭源文献只返回出版商链接与 OA 状态。
-- 获取的全文仅供个人研究使用，遵守各来源服务条款与版权许可。
+- 获取的全文仅供个人研究使用。

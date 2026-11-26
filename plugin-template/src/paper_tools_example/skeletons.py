@@ -1,7 +1,6 @@
 """可选角色骨架：Locator / Downloader / Extractor。
 
 实现后在 pyproject.toml 取消对应 entry-point 注释即可注册。
-合规硬约束：只允许官方 API 与 OA 来源；禁止任何绕过付费墙的实现。
 """
 
 from __future__ import annotations

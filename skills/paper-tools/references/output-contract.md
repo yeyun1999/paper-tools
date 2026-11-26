@@ -65,7 +65,7 @@
 | 0 | — | 成功，包括空结果 | 正常消费 data |
 | 2 | `USAGE` | 参数或查询组合错误 | 修正参数，不重试 |
 | 3 | `UPSTREAM` / `NOT_FOUND` | 上游失败或元数据未找到 | 稍后重试或换源 |
-| 4 | `FULLTEXT_UNAVAILABLE` | 无 OA 全文 | 展示出版商链接，不绕过付费墙 |
+| 4 | `FULLTEXT_UNAVAILABLE` | 无 OA 全文 | 展示出版商链接 |
 | 5 | `CONFIG` | 缺少配置或配置无效 | 修复配置后重试 |
 
 ## 流位置

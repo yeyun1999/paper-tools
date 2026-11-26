@@ -32,13 +32,12 @@ description: 使用 paper-tools CLI 或 MCP 检索生物医学文献、补全元
 - 多源结果按 DOI、PMID 或标题去重；`--limit` 是每个来源的上限，合并后可能超过该值。
 - 分页时原样回传 `data.next_cursor`；多源游标是以 `ms1.` 开头的不透明 token。
 - `locate` 的每个候选包含 `locator` 来源列表和有序 `downloaders` 推荐列表；下载按该顺序尝试，`--downloader` 可强制覆盖。
-- 只使用官方 API 和 OA 副本；闭源文献返回 `FULLTEXT_UNAVAILABLE` 和出版商链接，不绕过付费墙。
 - JSON 模式下 stdout 只包含 JSON；日志和警告位于 stderr。
 
 ## 资源路由
 
 - CLI 命令、选项和示例：`references/cli.md`
-- MCP 启动、工具参数和返回值：`references/mcp.md`
+- MCP 启动、工具选择与 Agent 工作流：`references/mcp.md`
 - JSON Schema、结果模型、NDJSON 和退出码：`references/output-contract.md`
 - 配置键、环境变量和缓存：`references/configuration.md`
 - 常见错误与 Windows 问题：`references/troubleshooting.md`

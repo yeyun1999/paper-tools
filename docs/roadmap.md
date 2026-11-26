@@ -150,7 +150,6 @@ uv build && uv publish       # 发布
 | 上游 API 变更/限流收紧 | 检索/下载失败 | 回放测试隔离日常开发；退避重试；api_key/mailto 配置化；live 冒烟定期跑 |
 | S2 无 key 共享限额低 | 批量场景易 429 | 默认 1 req/s + 缓存强化；文档引导申请 key |
 | 补全链放大请求量 | --enrich 批量时触发限流 | 按 host 限流统一约束；补全缓存 7d；优先级链提前终止 |
-| 版权合规 | 法律风险 | OA-only 硬约束写进架构与 README；插件指南禁止灰色来源 |
 | PDF 文本提取质量差 | AI 阅读体验 | 优先 XML；pypdf 结果标注 extractor；GROBID 以 Extractor 插件进 backlog |
 | 插件接口演进破坏第三方 | 生态受损 | 五角色接口保持最小；语义化版本；变更走 CHANGELOG |
 | Windows 路径/编码问题 | 本地开发受阻 | pathlib 全程、显式 UTF-8、CI 加 windows-latest 冒烟 |

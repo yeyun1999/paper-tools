@@ -10,7 +10,6 @@ bioRxiv / medRxiv 预印本元数据插件（官方 [details API](https://api.bi
 - 配置：`paper-tools config set plugins.biorxiv.server medrxiv` 可改变首选服务器。
 
 > 全文获取不在本插件范围：www.biorxiv.org 对非浏览器客户端返回 403（Cloudflare），
-> 按项目合规约束不做绕过。bioRxiv 预印本全文由内置 Europe PMC（PPR 记录）/
 > Unpaywall 定位链覆盖。
 
 ## 安装与验证

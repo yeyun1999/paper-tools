@@ -16,7 +16,7 @@
 ## FULLTEXT_UNAVAILABLE
 
 - 检查 `error.details.publisher_url` 和候选 `locator`。
-- 闭源或非 OA 文献不绕过付费墙。
+- 闭源或非 OA 文献无法获取全文。
 - PMC 文献确认 PMID/PMCID 正确，并检查 PMC OA 定位器是否加载。
 - 文本提取失败时尝试其他 PDF/XML 候选，或改用 XML 提取。
 
