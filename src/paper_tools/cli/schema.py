@@ -19,6 +19,7 @@ from paper_tools.core.models import (
     FullTextLinks,
     Identifier,
     Paper,
+    PaperSummary,
     SearchPage,
 )
 from paper_tools.core.query import Query
@@ -27,6 +28,7 @@ _MODELS: dict[str, type[BaseModel]] = {
     "Author": Author,
     "Identifier": Identifier,
     "Paper": Paper,
+    "PaperSummary": PaperSummary,
     "Query": Query,
     "SearchPage": SearchPage,
     "FullTextCandidate": FullTextCandidate,

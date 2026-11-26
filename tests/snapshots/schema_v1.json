@@ -5,7 +5,7 @@
       "details": {},
       "message": "example"
     },
-    "schema_version": "1.2"
+    "schema_version": "1.3"
   },
   "models": {
     "Artifact": {
@@ -299,6 +299,26 @@
               "title": "Authors",
               "type": "array"
             },
+            "cited_by_count": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cited By Count"
+            },
+            "cited_by_papers": {
+              "items": {
+                "$ref": "#/$defs/PaperSummary"
+              },
+              "title": "Cited By Papers",
+              "type": "array"
+            },
             "fulltext_links": {
               "items": {
                 "$ref": "#/$defs/FullTextCandidate"
@@ -312,6 +332,31 @@
               },
               "title": "Identifiers",
               "type": "object"
+            },
+            "impact_factor": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Impact Factor"
+            },
+            "issn": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Issn"
             },
             "journal": {
               "anyOf": [
@@ -374,6 +419,26 @@
               "default": null,
               "title": "Publisher Url"
             },
+            "reference_papers": {
+              "items": {
+                "$ref": "#/$defs/PaperSummary"
+              },
+              "title": "Reference Papers",
+              "type": "array"
+            },
+            "references_count": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "References Count"
+            },
             "sources": {
               "items": {
                 "type": "string"
@@ -400,6 +465,43 @@
             }
           },
           "title": "Paper",
+          "type": "object"
+        },
+        "PaperSummary": {
+          "properties": {
+            "authors": {
+              "items": {
+                "$ref": "#/$defs/Author"
+              },
+              "title": "Authors",
+              "type": "array"
+            },
+            "identifiers": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "title": "Identifiers",
+              "type": "object"
+            },
+            "title": {
+              "default": "",
+              "title": "Title",
+              "type": "string"
+            },
+            "year": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Year"
+            }
+          },
+          "title": "PaperSummary",
           "type": "object"
         }
       },
@@ -647,6 +749,26 @@
               "title": "Authors",
               "type": "array"
             },
+            "cited_by_count": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cited By Count"
+            },
+            "cited_by_papers": {
+              "items": {
+                "$ref": "#/$defs/PaperSummary"
+              },
+              "title": "Cited By Papers",
+              "type": "array"
+            },
             "fulltext_links": {
               "items": {
                 "$ref": "#/$defs/FullTextCandidate"
@@ -660,6 +782,31 @@
               },
               "title": "Identifiers",
               "type": "object"
+            },
+            "impact_factor": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Impact Factor"
+            },
+            "issn": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Issn"
             },
             "journal": {
               "anyOf": [
@@ -722,6 +869,26 @@
               "default": null,
               "title": "Publisher Url"
             },
+            "reference_papers": {
+              "items": {
+                "$ref": "#/$defs/PaperSummary"
+              },
+              "title": "Reference Papers",
+              "type": "array"
+            },
+            "references_count": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "References Count"
+            },
             "sources": {
               "items": {
                 "type": "string"
@@ -748,6 +915,43 @@
             }
           },
           "title": "Paper",
+          "type": "object"
+        },
+        "PaperSummary": {
+          "properties": {
+            "authors": {
+              "items": {
+                "$ref": "#/$defs/Author"
+              },
+              "title": "Authors",
+              "type": "array"
+            },
+            "identifiers": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "title": "Identifiers",
+              "type": "object"
+            },
+            "title": {
+              "default": "",
+              "title": "Title",
+              "type": "string"
+            },
+            "year": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Year"
+            }
+          },
+          "title": "PaperSummary",
           "type": "object"
         }
       },
@@ -886,6 +1090,43 @@
           ],
           "title": "FullTextCandidate",
           "type": "object"
+        },
+        "PaperSummary": {
+          "properties": {
+            "authors": {
+              "items": {
+                "$ref": "#/$defs/Author"
+              },
+              "title": "Authors",
+              "type": "array"
+            },
+            "identifiers": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "title": "Identifiers",
+              "type": "object"
+            },
+            "title": {
+              "default": "",
+              "title": "Title",
+              "type": "string"
+            },
+            "year": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Year"
+            }
+          },
+          "title": "PaperSummary",
+          "type": "object"
         }
       },
       "properties": {
@@ -908,6 +1149,26 @@
           "title": "Authors",
           "type": "array"
         },
+        "cited_by_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cited By Count"
+        },
+        "cited_by_papers": {
+          "items": {
+            "$ref": "#/$defs/PaperSummary"
+          },
+          "title": "Cited By Papers",
+          "type": "array"
+        },
         "fulltext_links": {
           "items": {
             "$ref": "#/$defs/FullTextCandidate"
@@ -921,6 +1182,31 @@
           },
           "title": "Identifiers",
           "type": "object"
+        },
+        "impact_factor": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Impact Factor"
+        },
+        "issn": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Issn"
         },
         "journal": {
           "anyOf": [
@@ -983,6 +1269,26 @@
           "default": null,
           "title": "Publisher Url"
         },
+        "reference_papers": {
+          "items": {
+            "$ref": "#/$defs/PaperSummary"
+          },
+          "title": "Reference Papers",
+          "type": "array"
+        },
+        "references_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "References Count"
+        },
         "sources": {
           "items": {
             "type": "string"
@@ -1009,6 +1315,82 @@
         }
       },
       "title": "Paper",
+      "type": "object"
+    },
+    "PaperSummary": {
+      "$defs": {
+        "Author": {
+          "properties": {
+            "affiliation": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Affiliation"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "orcid": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Orcid"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "title": "Author",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "authors": {
+          "items": {
+            "$ref": "#/$defs/Author"
+          },
+          "title": "Authors",
+          "type": "array"
+        },
+        "identifiers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Identifiers",
+          "type": "object"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        },
+        "year": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Year"
+        }
+      },
+      "title": "PaperSummary",
       "type": "object"
     },
     "Query": {
@@ -1224,6 +1606,26 @@
               "title": "Authors",
               "type": "array"
             },
+            "cited_by_count": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cited By Count"
+            },
+            "cited_by_papers": {
+              "items": {
+                "$ref": "#/$defs/PaperSummary"
+              },
+              "title": "Cited By Papers",
+              "type": "array"
+            },
             "fulltext_links": {
               "items": {
                 "$ref": "#/$defs/FullTextCandidate"
@@ -1237,6 +1639,31 @@
               },
               "title": "Identifiers",
               "type": "object"
+            },
+            "impact_factor": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Impact Factor"
+            },
+            "issn": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Issn"
             },
             "journal": {
               "anyOf": [
@@ -1299,6 +1726,26 @@
               "default": null,
               "title": "Publisher Url"
             },
+            "reference_papers": {
+              "items": {
+                "$ref": "#/$defs/PaperSummary"
+              },
+              "title": "Reference Papers",
+              "type": "array"
+            },
+            "references_count": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "References Count"
+            },
             "sources": {
               "items": {
                 "type": "string"
@@ -1325,6 +1772,43 @@
             }
           },
           "title": "Paper",
+          "type": "object"
+        },
+        "PaperSummary": {
+          "properties": {
+            "authors": {
+              "items": {
+                "$ref": "#/$defs/Author"
+              },
+              "title": "Authors",
+              "type": "array"
+            },
+            "identifiers": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "title": "Identifiers",
+              "type": "object"
+            },
+            "title": {
+              "default": "",
+              "title": "Title",
+              "type": "string"
+            },
+            "year": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Year"
+            }
+          },
+          "title": "PaperSummary",
           "type": "object"
         }
       },
@@ -1372,11 +1856,11 @@
       "type": "object"
     }
   },
-  "schema_version": "1.2",
+  "schema_version": "1.3",
   "success_envelope": {
     "command": "cmd",
     "data": {},
-    "schema_version": "1.2",
+    "schema_version": "1.3",
     "warnings": []
   }
 }

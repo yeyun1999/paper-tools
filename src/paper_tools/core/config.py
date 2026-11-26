@@ -52,10 +52,28 @@ class MetadataConfig(BaseModel):
     )
 
 
+class OutputConfig(BaseModel):
+    search_fields: list[str] = Field(
+        default_factory=lambda: ["title", "identifiers.doi", "year", "cited_by_count", "abstract"]
+    )
+    get_fields: list[str] = Field(
+        default_factory=lambda: [
+            "title",
+            "identifiers.doi",
+            "year",
+            "cited_by_count",
+            "journal",
+            "oa_status",
+            "abstract",
+        ]
+    )
+
+
 class AppConfig(BaseModel):
     general: GeneralConfig = Field(default_factory=GeneralConfig)
     fetch: FetchConfig = Field(default_factory=FetchConfig)
     metadata: MetadataConfig = Field(default_factory=MetadataConfig)
+    output: OutputConfig = Field(default_factory=OutputConfig)
     plugins: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
     def plugin_config(self, name: str) -> dict[str, Any]:
@@ -106,7 +124,20 @@ def _apply_env(config: AppConfig) -> None:
                 setattr(config.general, field, value)
         elif "__" in rest:
             plugin, _, option = rest.partition("__")
-            if plugin and option:
+            if plugin == "output" and option in {"search_fields", "get_fields"}:
+                raw_fields: Any = value
+                with contextlib.suppress(tomllib.TOMLDecodeError):
+                    raw_fields = tomllib.loads(f"value = {value}")["value"]
+                if isinstance(raw_fields, str):
+                    raw_fields = [field.strip() for field in raw_fields.split(",") if field.strip()]
+                try:
+                    output = OutputConfig.model_validate(
+                        {**config.output.model_dump(), option: raw_fields}
+                    )
+                except ValidationError as exc:
+                    raise ConfigError(f"Invalid output configuration: {exc}") from exc
+                config.output = output
+            elif plugin and option:
                 config.plugins.setdefault(plugin, {})[option] = value
 
 
@@ -118,9 +149,11 @@ def config_path_for_write(path: Path | None = None) -> Path:
 def set_config_value(key: str, raw_value: str, path: Path | None = None) -> Path:
     """Set a dotted key in the TOML file (env overrides are not written)."""
     parts = key.split(".")
-    if parts[0] not in {"general", "fetch", "metadata", "plugins"} or len(parts) < 2:
+    roots = {"general", "fetch", "metadata", "output", "plugins"}
+    if parts[0] not in roots or len(parts) < 2:
         raise UsageError(
-            f"Invalid config key {key!r}; expected general.*, fetch.*, metadata.*, plugins.*.*"
+            f"Invalid config key {key!r}; expected general.*, fetch.*, metadata.*, "
+            "output.*, plugins.*.*"
         )
     config_path = config_path_for_write(path)
     data: dict[str, Any] = {}

@@ -17,7 +17,7 @@ CandidateFormat = Literal["pdf", "xml", "text", "landing"]
 
 # JSON contract version. Bump on any field change (snapshot gate + CHANGELOG).
 # Also keys the metadata cache so contract bumps invalidate stale entries.
-SCHEMA_VERSION = "1.2"
+SCHEMA_VERSION = "1.3"
 
 _DOI_URL_PREFIXES = (
     "https://doi.org/",
@@ -107,6 +107,13 @@ def merge_candidate(base: FullTextCandidate, incoming: FullTextCandidate) -> Ful
     )
 
 
+class PaperSummary(BaseModel):
+    title: str = ""
+    identifiers: dict[str, str] = Field(default_factory=dict)
+    authors: list[Author] = Field(default_factory=list)
+    year: int | None = None
+
+
 class Paper(BaseModel):
     title: str = ""
     identifiers: dict[str, str] = Field(default_factory=dict)
@@ -120,6 +127,12 @@ class Paper(BaseModel):
     license: str | None = None
     sources: list[str] = Field(default_factory=list)
     fulltext_links: list[FullTextCandidate] = Field(default_factory=list)
+    issn: str | None = None
+    impact_factor: float | None = Field(default=None, ge=0)
+    cited_by_count: int | None = Field(default=None, ge=0)
+    references_count: int | None = Field(default=None, ge=0)
+    cited_by_papers: list[PaperSummary] = Field(default_factory=list)
+    reference_papers: list[PaperSummary] = Field(default_factory=list)
 
 
 class SearchPage(BaseModel):
@@ -187,7 +200,29 @@ _MERGE_SCALAR_FIELDS = (
     "publication_type",
     "publisher_url",
     "license",
+    "issn",
+    "impact_factor",
+    "cited_by_count",
+    "references_count",
 )
+
+
+def _summary_key(paper: PaperSummary) -> tuple[str, str]:
+    for kind in ("doi", "pmid", "pmcid", "s2"):
+        if kind in paper.identifiers:
+            return kind, paper.identifiers[kind]
+    return "title", " ".join(paper.title.lower().split())
+
+
+def _merge_summaries(base: list[PaperSummary], incoming: list[PaperSummary]) -> list[PaperSummary]:
+    merged = list(base)
+    positions = {_summary_key(paper): index for index, paper in enumerate(merged)}
+    for paper in incoming:
+        key = _summary_key(paper)
+        if key not in positions:
+            positions[key] = len(merged)
+            merged.append(paper.model_copy(deep=True))
+    return merged
 
 
 def merge_papers(base: Paper, incoming: Paper, *, source: str) -> tuple[Paper, list[str]]:
@@ -239,6 +274,12 @@ def merge_papers(base: Paper, incoming: Paper, *, source: str) -> tuple[Paper, l
     merged.fulltext_links = list(links.values())
     if merged.fulltext_links != before_links:
         contributed = True
+    for field in ("cited_by_papers", "reference_papers"):
+        before = getattr(merged, field)
+        combined = _merge_summaries(before, getattr(incoming, field))
+        setattr(merged, field, combined)
+        if combined != before:
+            contributed = True
     if contributed and source and source not in merged.sources:
         merged.sources.append(source)
     return merged, warnings

@@ -8,7 +8,7 @@ from typing import Any
 from defusedxml.ElementTree import fromstring as safe_xml_fromstring
 
 from paper_tools.core.errors import UpstreamError
-from paper_tools.core.models import Author, Paper, SearchPage
+from paper_tools.core.models import Author, Paper, PaperSummary, SearchPage, normalize_pmcid
 from paper_tools.core.plugins import PluginContext, PluginMeta
 from paper_tools.core.query import Query
 
@@ -136,6 +136,7 @@ class PubMedSearcher(_PubMedBase):
                     year=_year_from(record.get("pubdate")),
                     journal=record.get("fulljournalname") or record.get("source"),
                     publication_type=(record.get("pubtype") or [None])[0],
+                    issn=record.get("issn") if isinstance(record.get("issn"), str) else None,
                 )
             )
         return papers
@@ -177,6 +178,50 @@ class PubMedMetadata(_PubMedBase):
 
 def _text(element: Any) -> str:
     return "".join(element.itertext()).strip() if element is not None else ""
+
+
+def _citation_title(citation: str) -> str:
+    if not citation:
+        return ""
+    without_year = re.sub(r"\b(?:19|20)\d{2}\b.*$", "", citation).strip()
+    without_year = without_year.rstrip(".;, ") or citation
+    parts = [part.strip() for part in re.split(r"\.\s+", without_year) if part.strip()]
+    if not parts:
+        return ""
+    if len(parts) > 1 and ("," in parts[0] or re.search(r"\b[A-Z](?:[ -][A-Z])*[.]?$", parts[0])):
+        return parts[1]
+    return parts[0]
+
+
+def _reference_to_summary(reference: Any) -> PaperSummary | None:
+    citation = _text(reference.find("Citation"))
+    identifiers: dict[str, str] = {}
+    for article_id in reference.findall("ArticleIdList/ArticleId"):
+        id_type = article_id.get("IdType")
+        value = _text(article_id)
+        if not value:
+            continue
+        if id_type == "doi":
+            identifiers["doi"] = value.lower()
+        elif id_type == "pubmed":
+            identifiers["pmid"] = value
+        elif id_type == "pmc":
+            identifiers["pmcid"] = normalize_pmcid(value)
+    if not identifiers:
+        doi = re.search(r"\b10\.\d{4,9}/\S+", citation)
+        pmid = re.search(r"\bPMID:\s*(\d+)", citation, re.IGNORECASE)
+        pmcid = re.search(r"\bPMC(?:ID)?:?\s*(?:PMC)?(\d+)", citation, re.IGNORECASE)
+        if doi:
+            identifiers["doi"] = doi.group(1).rstrip(".").lower()
+        if pmid:
+            identifiers["pmid"] = pmid.group(1)
+        if pmcid:
+            identifiers["pmcid"] = normalize_pmcid(pmcid.group(1))
+    year = _year_from(citation)
+    title = _citation_title(citation)
+    if not (title or identifiers or year is not None):
+        return None
+    return PaperSummary(title=title, identifiers=identifiers, year=year)
 
 
 def _parse_efetch(content: bytes, original: Paper) -> Paper:
@@ -225,6 +270,17 @@ def _parse_efetch(content: bytes, original: Paper) -> Paper:
 
     pub_types = [_text(pt) for pt in art.findall("PublicationTypeList/PublicationType")]
 
+    journal = art.find("Journal")
+    issns = journal.findall("ISSN") if journal is not None else []
+    issn = next(
+        (_text(value) for value in issns if value.get("ISSNType") == "Print" and _text(value)),
+        None,
+    )
+    if issn is None:
+        issn = next((_text(value) for value in issns if _text(value)), None)
+    reference_list = art.find("ReferenceList")
+    references = reference_list.findall("Reference") if reference_list is not None else []
+
     return Paper(
         title=_text(art.find("ArticleTitle")),
         identifiers=identifiers,
@@ -233,4 +289,11 @@ def _parse_efetch(content: bytes, original: Paper) -> Paper:
         journal=art.findtext("Journal/Title"),
         abstract="\n".join(abstract_parts) if abstract_parts else None,
         publication_type=pub_types[0] if pub_types else None,
+        issn=issn,
+        references_count=len(references) if reference_list is not None else None,
+        reference_papers=[
+            summary
+            for reference in references
+            if (summary := _reference_to_summary(reference)) is not None
+        ],
     )

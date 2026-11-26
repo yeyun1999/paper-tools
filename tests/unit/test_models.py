@@ -9,6 +9,7 @@ from paper_tools.core.models import (
     Author,
     FullTextCandidate,
     Paper,
+    PaperSummary,
     merge_papers,
     normalize_doi,
     parse_identifier,
@@ -114,6 +115,32 @@ def test_merge_fills_missing_and_never_overwrites() -> None:
     assert merged.oa_status == "gold"
     assert merged.sources == ["prov"]
     assert warnings == []
+
+
+def test_merge_fills_bibliographic_fields_and_unions_related_papers() -> None:
+    base = Paper(
+        cited_by_count=0,
+        cited_by_papers=[PaperSummary(title="Citing A", identifiers={"doi": "10.1/citing-a"})],
+    )
+    incoming = Paper(
+        issn="1234-5678",
+        impact_factor=5.2,
+        cited_by_count=9,
+        references_count=12,
+        cited_by_papers=[
+            PaperSummary(title="Citing A", identifiers={"doi": "10.1/citing-a"}),
+            PaperSummary(title="Citing B", identifiers={"doi": "10.1/citing-b"}),
+        ],
+        reference_papers=[PaperSummary(title="Reference", year=2020)],
+    )
+    merged, _ = merge_papers(base, incoming, source="provider")
+    assert merged.cited_by_count == 0
+    assert merged.issn == "1234-5678"
+    assert merged.impact_factor == 5.2
+    assert merged.references_count == 12
+    assert [paper.title for paper in merged.cited_by_papers] == ["Citing A", "Citing B"]
+    assert merged.reference_papers[0].title == "Reference"
+    assert "provider" in merged.sources
 
 
 def test_merge_identifier_conflict_warns() -> None:

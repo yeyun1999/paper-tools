@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import xml.etree.ElementTree as ET
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -25,6 +26,7 @@ from paper_tools.core.errors import (
     UpstreamError,
     UsageError,
 )
+from paper_tools.core.fields import field_is_present
 from paper_tools.core.models import (
     SCHEMA_VERSION,
     Artifact,
@@ -219,6 +221,7 @@ class SearchService:
         limit: int = 20,
         cursor: str | None = None,
         enrich: bool = False,
+        required_fields: Sequence[str] | None = None,
     ) -> tuple[SearchPage, list[str]]:
         """Search one or more sources and optionally enrich the results.
 
@@ -228,6 +231,7 @@ class SearchService:
             limit: Maximum results requested from each source.
             cursor: Opaque next-page cursor from a previous response.
             enrich: Whether to fill missing metadata through ``MetadataService``.
+            required_fields: Output fields that enrichment should try to fill.
 
         Returns:
             A tuple containing the search page and non-fatal warning messages.
@@ -247,7 +251,9 @@ class SearchService:
         if enrich:
             items = []
             for item in page.items:
-                enriched, item_warnings = self._metadata.enrich(item, cache_result=False)
+                enriched, item_warnings = self._metadata.enrich(
+                    item, cache_result=False, required_fields=required_fields
+                )
                 items.append(enriched)
                 warnings.extend(item_warnings)
             page = page.model_copy(update={"items": items})
@@ -359,6 +365,13 @@ class SearchService:
         return page, warnings
 
 
+def _has_required_fields(paper: Paper, required_fields: Sequence[str]) -> bool:
+    if not is_complete(paper):
+        return False
+    data = paper.model_dump(mode="json")
+    return all(field_is_present(data, field) for field in required_fields)
+
+
 class MetadataService:
     """Enrichment chain: route by id_kinds, fill-missing merge, cache results."""
 
@@ -375,18 +388,24 @@ class MetadataService:
         self._cache = cache
 
     def enrich(
-        self, paper: Paper, *, only_source: str | None = None, cache_result: bool = True
+        self,
+        paper: Paper,
+        *,
+        only_source: str | None = None,
+        cache_result: bool = True,
+        required_fields: Sequence[str] | None = None,
     ) -> tuple[Paper, list[str]]:
         """Fill missing paper metadata using compatible providers.
 
-        Providers run in configured priority order and stop once the title and
-        abstract are present. Cached results are merged without overwriting
-        values already supplied by the caller.
+        Providers run in configured priority order and stop once the title,
+        abstract and requested output fields are present. Cached results are
+        merged without overwriting values already supplied by the caller.
 
         Args:
             paper: Paper whose identifiers seed the enrichment chain.
             only_source: Restrict the chain to one metadata provider.
             cache_result: Whether a newly enriched result may be written to the cache.
+            required_fields: Output fields that providers should try to fill.
 
         Returns:
             The enriched paper and non-fatal warning messages.
@@ -423,10 +442,11 @@ class MetadataService:
                 identifiers=paper.identifiers,
             )
 
+        requested_fields = tuple(sorted(set(required_fields or [])))
         cache_key = (
             f"meta:v{SCHEMA_VERSION}:{_METADATA_CACHE_VERSION}:"
             + json.dumps(paper.identifiers, sort_keys=True)
-            + f":{only_source}"
+            + f":{only_source}:{json.dumps(requested_fields)}"
         )
         cached = self._cache.get(cache_key)
         if cached is not None:
@@ -437,7 +457,7 @@ class MetadataService:
         cache_value = Paper(identifiers=dict(paper.identifiers))
         failures = 0
         for provider in providers:
-            if is_complete(current):
+            if _has_required_fields(current, requested_fields):
                 break
             try:
                 incoming = provider.enrich(current)

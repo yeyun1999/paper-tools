@@ -128,7 +128,7 @@ paper-tools/
 
 ## 5. 核心域模型
 
-所有模型为 pydantic v2，字段即 JSON 契约（`schema_version = "1.2"`；1.0 于 M5 冻结，1.1 新增 Paper.fulltext_links，1.2 将候选 locator 改为列表并新增 downloaders 推荐列表）。示意：
+所有模型为 pydantic v2，字段即 JSON 契约（`schema_version = "1.3"`；1.0 于 M5 冻结，1.1 新增 Paper.fulltext_links，1.2 将候选 locator 改为列表并新增 downloaders 推荐列表，1.3 新增文献计量/引用关系字段与默认输出投影）。示意：
 
 ```python
 class Author(BaseModel):
@@ -431,7 +431,7 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 
 ```json
 {
-  "schema_version": "1.2",
+  "schema_version": "1.3",
   "command": "search",
   "data": { "items": [], "total": 0, "next_cursor": null, "source": "pubmed" },
   "warnings": []
@@ -442,7 +442,7 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 
 ```json
 {
-  "schema_version": "1.2",
+  "schema_version": "1.3",
   "error": {
     "code": "USAGE",
     "message": "Invalid --format; expected pdf, xml, or text.",
@@ -454,7 +454,7 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 - 多 ID `get` 的 `--json` 输出为 NDJSON（每 ID 一行结果或错误），便于流式处理；单 ID 失败不中断批次，退出码取第一个失败。
 - `fetch` 仅接受一个 ID，`--json` 始终输出单个 JSON 对象，不产生 NDJSON；传入多个 ID 返回用法错误（退出码 2）。
 - `fetch` / `get` 的逐文献错误（如全文不可得、元数据未找到）作为结果信封写入 **stdout** 结果流；进程级错误（用法/配置）才走 stderr。批量仅适用于 `get`。
-- `--fields` 裁剪 Paper 字段（如 `--fields title,doi,year`），降低 AI 上下文占用。
+- `--fields` 支持对象/数组嵌套投影（如 `--fields 'title,identifiers.doi,authors[].name'`），保持 JSON 容器结构；`--fields all` 返回完整 Paper，并让 `get` 或 `search --enrich` 尝试补全全部字段。CLI 与 MCP 默认分别读取 `output.search_fields` / `output.get_fields`，显式字段参数优先。
 - 补全冲突、提取质量提示等以 `warnings` 数组随成功结果返回，不污染 data。
 
 ### 9.3 退出码
@@ -480,7 +480,7 @@ paper-tools fetch doi:10.1038/s41586-020-2649-2 --output papers/paper.pdf
 
 # AI 助理
 paper-tools search "CRISPR base editing" --source pubmed --limit 10 --json
-paper-tools get pmid:12345678 --fields title,doi,abstract --json
+paper-tools get pmid:12345678 --fields 'title,identifiers.doi,abstract' --json
 paper-tools fetch doi:10.1038/s41586-020-2649-2 --output papers/paper.txt --json
 ```
 
@@ -497,7 +497,7 @@ paper-tools fetch doi:10.1038/s41586-020-2649-2 --output papers/paper.txt --json
 | `fetch_fulltext` | FetchService（定位→下载→提取） | FullText envelope（含落盘路径） |
 | `list_sources` | PluginRegistry.describe | 五角色插件清单 envelope |
 
-- 入参语义与 CLI 选项同源（pydantic `Field` 注解生成 inputSchema）；返回与 `--json` 完全一致的 success/error envelope（schema_version 1.2）。业务错误不抛异常，而是返回 `{"error": {code, message, details}}` envelope，agent 按 `error.code` 分支处理。
+- 入参语义与 CLI 选项同源（pydantic `Field` 注解生成 inputSchema）；返回与 `--json` 完全一致的 success/error envelope（schema_version 1.3）。业务错误不抛异常，而是返回 `{"error": {code, message, details}}` envelope，agent 按 `error.code` 分支处理。
 - stdio 纯度：协议外输出全部走 stderr（logging 已配置 stderr）；工具函数为同步实现，由 SDK 调度。
 - 契约测试：`tests/test_mcp.py`（fake 插件下五工具 envelope/错误路径 + 真实子进程 stdio 往返 + 入参 schema 冻结）；`tests/integration/test_live.py::test_mcp_stdio_full_flow_live`（真实 API 下 search→get→fetch 全流程）。
 - 挂载配置与调用范式见 [examples/agent-usage.md](../examples/agent-usage.md)。
@@ -533,6 +533,11 @@ locators = []                   # 默认 Locator 列表；空 = 全部；--locat
 
 [metadata]
 enrich_priority = ["pubmed", "europepmc", "crossref", "openalex", "semantic_scholar", "unpaywall"]
+
+[output]
+search_fields = ["title", "identifiers.doi", "year", "cited_by_count", "abstract"]
+get_fields = ["title", "identifiers.doi", "year", "cited_by_count", "journal", "oa_status", "abstract"]
+
 ```
 
 密钥只从配置/环境变量读取，绝不写入日志与 JSON 输出。

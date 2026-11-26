@@ -7,15 +7,21 @@ from typing import Annotated, Any
 import typer
 
 from paper_tools.cli import context, render
-from paper_tools.core.errors import PaperToolsError
+from paper_tools.core.config import AppConfig, load_config
+from paper_tools.core.errors import ConfigError, PaperToolsError
 from paper_tools.core.models import Paper, parse_identifier
 from paper_tools.core.plugins import available_names
 
 # Module-level: Typer evals string annotations against module globals.
+try:
+    _DEFAULT_CONFIG = load_config()
+except ConfigError:
+    _DEFAULT_CONFIG = AppConfig()
 _PROVIDER_HELP = (
     "Restrict enrichment to one plugin. Available: "
     f"{', '.join(available_names('metadata')) or '(none)'}."
 )
+_GET_FIELDS_HELP = render.output_fields_help(_DEFAULT_CONFIG.output.get_fields)
 
 
 def register(app: typer.Typer) -> None:
@@ -37,23 +43,27 @@ def register(app: typer.Typer) -> None:
         ] = None,
         fields: Annotated[
             str | None,
-            typer.Option(
-                "--fields",
-                help="Comma-separated Paper fields to keep, e.g. title,doi,abstract.",
-            ),
+            typer.Option("--fields", help=_GET_FIELDS_HELP),
         ] = None,
     ) -> None:
         """Fetch complete metadata for one or more papers. Batch output is NDJSON with --json."""
         opts = ctx.obj
         with render.error_guard(opts, "get"):
             services = context.build_services(opts)
+            selected_fields = render.resolve_output_fields(
+                fields, services.config.output.get_fields
+            )
             payloads: list[dict[str, Any]] = []
             exit_code = 0
             for identifier in identifiers:
                 try:
                     ident = parse_identifier(identifier)
                     stub = Paper(identifiers={ident.kind: ident.value})
-                    paper, warnings = services.metadata.enrich(stub, only_source=source)
+                    paper, warnings = services.metadata.enrich(
+                        stub,
+                        only_source=source,
+                        required_fields=render.enrichment_fields(selected_fields),
+                    )
                 except PaperToolsError as exc:
                     payloads.append(render.error_envelope(exc))
                     if exit_code == 0:
@@ -65,8 +75,8 @@ def register(app: typer.Typer) -> None:
                     continue
                 warnings = services.registry.load_warnings + warnings
                 data = paper.model_dump(mode="json")
-                if fields:
-                    data = render.filter_fields(data, fields)
+                if selected_fields is not None:
+                    data = render.filter_fields(data, selected_fields)
                 payloads.append(render.success_envelope("get", data, warnings))
                 if not opts.json_output:
                     render.render_paper(paper)

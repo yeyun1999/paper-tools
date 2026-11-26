@@ -51,13 +51,24 @@ paper-tools search "CRISPR" --source all --limit 20 --json
 paper-tools search --source pubmed --raw 'CRISPR[Title] AND 2023:2026[dp]' --json
 
 # 补全元数据并裁剪字段
-paper-tools search "CRISPR" --source europepmc --enrich --fields title,doi,year,abstract --json
+paper-tools search "CRISPR" --source europepmc --enrich --fields title,identifiers.doi,year,abstract --json
+
+# 数组嵌套投影：只保留每位作者的姓名
+paper-tools get pmid:38308006 --fields 'authors[].name' --json
+
+# 返回并尝试补全全部 Paper 字段（覆盖 output.search_fields）
+paper-tools search "CRISPR" --enrich --fields all --json
 
 # 分页：原样回传 next_cursor
 paper-tools search "CRISPR" --source pubmed --cursor '<next_cursor>' --json
 ```
 
 `--source` 可重复或逗号分隔；`all` 强制全部搜索器。多源 `--limit` 限制每个来源，合并去重后不再截断。
+`search` 默认输出 `title,identifiers.doi,year,cited_by_count,abstract`，`get` 默认输出
+`title,identifiers.doi,year,cited_by_count,journal,oa_status,abstract`；可用 `[output]` 配置分别修改。
+对象嵌套使用 `.`，数组嵌套使用 `[]`，例如 `identifiers.doi`、`authors[].name`；
+输出保留原对象/数组结构，不再把标识符提升到顶层。`--fields all` 返回全部 Paper 字段，
+并在 `get` 或 `search --enrich` 中要求补全全部字段；显式 `--fields` 优先于配置。
 
 ## 元数据
 
@@ -66,7 +77,7 @@ paper-tools get pmid:38308006 --json
 paper-tools get doi:10.1038/s41586-020-2649-2 --source crossref --json
 
 # 多 ID：JSON 输出为 NDJSON
-paper-tools get pmid:38308006 doi:10.1038/s41586-020-2649-2 --fields title,doi,year --json
+paper-tools get pmid:38308006 doi:10.1038/s41586-020-2649-2 --fields title,identifiers.doi,year --json
 ```
 
 支持的标识符：`doi:`、`pmid:`、`pmcid:`、`openalex:`、`s2:`、`arxiv:`、DOI URL、裸 DOI 和纯数字 PMID。

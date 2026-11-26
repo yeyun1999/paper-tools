@@ -16,6 +16,7 @@ from paper_tools.core.models import (
     FullTextCandidate,
     OAStatus,
     Paper,
+    PaperSummary,
     SearchPage,
     normalize_doi,
     normalize_pmcid,
@@ -26,25 +27,84 @@ from paper_tools.core.query import Query
 _BASE = "https://api.semanticscholar.org/graph/v1"
 SEARCH_URL = f"{_BASE}/paper/search"
 PAPER_URL = f"{_BASE}/paper"
-FIELDS = "title,abstract,year,authors,externalIds,venue,publicationTypes,openAccessPdf,isOpenAccess"
+FIELDS = (
+    "title,abstract,year,authors,externalIds,venue,publicationTypes,openAccessPdf,isOpenAccess,"
+    "citationCount,referenceCount"
+)
+DETAIL_FIELDS = (
+    FIELDS
+    + ",citations.paperId,citations.title,citations.year,citations.authors,citations.externalIds,"
+    "references.paperId,references.title,references.year,references.authors,references.externalIds"
+)
 _SEARCH_TTL = 3600
 _METADATA_TTL = 7 * 86400
 _OA_STATUSES = {"gold", "green", "hybrid", "bronze", "closed"}
 
 
-def _paper_to_paper(record: dict[str, Any]) -> Paper:
-    ext = record.get("externalIds") or {}
+def _identifiers(record: dict[str, Any]) -> dict[str, str]:
+    ext = record.get("externalIds")
+    ext = ext if isinstance(ext, dict) else {}
     identifiers: dict[str, str] = {}
-    if ext.get("DOI"):
-        identifiers["doi"] = normalize_doi(ext["DOI"])
-    if ext.get("PubMed"):
-        identifiers["pmid"] = str(ext["PubMed"])
-    if ext.get("PubMedCentral"):
-        identifiers["pmcid"] = normalize_pmcid(str(ext["PubMedCentral"]))
-    if ext.get("ArXiv"):
-        identifiers["arxiv"] = str(ext["ArXiv"])
-    if record.get("paperId"):
-        identifiers["s2"] = record["paperId"]
+    doi = ext.get("DOI")
+    if isinstance(doi, str) and doi:
+        identifiers["doi"] = normalize_doi(doi)
+    for key, kind in (("PubMed", "pmid"), ("ArXiv", "arxiv")):
+        value = ext.get(key)
+        if isinstance(value, (str, int)) and not isinstance(value, bool):
+            identifiers[kind] = str(value)
+    pmcid = ext.get("PubMedCentral")
+    if isinstance(pmcid, (str, int)) and not isinstance(pmcid, bool):
+        identifiers["pmcid"] = normalize_pmcid(str(pmcid))
+    paper_id = record.get("paperId")
+    if isinstance(paper_id, str) and paper_id:
+        identifiers["s2"] = paper_id
+    return identifiers
+
+
+def _authors(record: dict[str, Any]) -> list[Author]:
+    authors = record.get("authors")
+    if not isinstance(authors, list):
+        return []
+    return [
+        Author(name=author["name"])
+        for author in authors
+        if isinstance(author, dict) and isinstance(author.get("name"), str) and author["name"]
+    ]
+
+
+def _count(value: Any) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
+def _summary(record: Any, wrapper: str) -> PaperSummary | None:
+    if not isinstance(record, dict):
+        return None
+    nested = record.get(wrapper)
+    if not isinstance(nested, dict):
+        return None
+    title = nested.get("title")
+    year = nested.get("year")
+    if not isinstance(year, int) or isinstance(year, bool):
+        year = None
+    summary = PaperSummary(
+        title=title if isinstance(title, str) else "",
+        identifiers=_identifiers(nested),
+        authors=_authors(nested),
+        year=year,
+    )
+    if summary.title or summary.identifiers or summary.authors or year is not None:
+        return summary
+    return None
+
+
+def _summaries(value: Any, wrapper: str) -> list[PaperSummary]:
+    if not isinstance(value, list):
+        return []
+    return [summary for record in value if (summary := _summary(record, wrapper)) is not None]
+
+
+def _paper_to_paper(record: dict[str, Any]) -> Paper:
+    identifiers = _identifiers(record)
 
     oa_pdf = record.get("openAccessPdf") or {}
     raw_status: str = str(oa_pdf.get("status") or "").lower()
@@ -66,7 +126,7 @@ def _paper_to_paper(record: dict[str, Any]) -> Paper:
     return Paper(
         title=record.get("title") or "",
         identifiers=identifiers,
-        authors=[Author(name=a["name"]) for a in record.get("authors") or [] if a.get("name")],
+        authors=_authors(record),
         year=record.get("year"),
         journal=record.get("venue") or None,
         abstract=record.get("abstract"),
@@ -75,6 +135,10 @@ def _paper_to_paper(record: dict[str, Any]) -> Paper:
         license=oa_pdf.get("license"),
         publisher_url=(f"https://doi.org/{identifiers['doi']}" if "doi" in identifiers else None),
         fulltext_links=links,
+        cited_by_count=_count(record.get("citationCount")),
+        references_count=_count(record.get("referenceCount")),
+        cited_by_papers=_summaries(record.get("citations"), "citingPaper"),
+        reference_papers=_summaries(record.get("references"), "citedPaper"),
     )
 
 
@@ -154,7 +218,7 @@ class SemanticScholarMetadata(_S2Base):
         else:
             return paper
         url = f"{PAPER_URL}/{quote(paper_id, safe=':')}"
-        data = self._get(url, {"fields": FIELDS}, _METADATA_TTL)
+        data = self._get(url, {"fields": DETAIL_FIELDS}, _METADATA_TTL)
         if not data.get("paperId"):
             return paper
         return _paper_to_paper(data)

@@ -8,7 +8,7 @@ from typing import Any
 from urllib.parse import quote
 
 from paper_tools.core.errors import UsageError
-from paper_tools.core.models import Author, Paper, SearchPage, normalize_doi
+from paper_tools.core.models import Author, Paper, PaperSummary, SearchPage, normalize_doi
 from paper_tools.core.plugins import PluginContext, PluginMeta
 from paper_tools.core.query import Query
 
@@ -27,34 +27,109 @@ def _clean_abstract(raw: str | None) -> str | None:
 
 def _year(item: dict[str, Any]) -> int | None:
     for key in ("published-print", "published-online", "issued", "created"):
-        parts = (item.get(key) or {}).get("date-parts") or []
-        if parts and parts[0] and isinstance(parts[0][0], int):
-            return int(parts[0][0])
+        value = item.get(key)
+        if not isinstance(value, dict):
+            continue
+        parts = value.get("date-parts")
+        if (
+            isinstance(parts, list)
+            and parts
+            and isinstance(parts[0], list)
+            and parts[0]
+            and isinstance(parts[0][0], int)
+            and not isinstance(parts[0][0], bool)
+        ):
+            return parts[0][0]
+    year = item.get("year")
+    if isinstance(year, int) and not isinstance(year, bool):
+        return year
+    if isinstance(year, str) and year.isdigit():
+        return int(year)
     return None
+
+
+def _count(value: Any) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
+def _authors(items: Any) -> list[Author]:
+    if not isinstance(items, list):
+        return []
+    authors: list[Author] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        given = item.get("given")
+        family = item.get("family")
+        name = (
+            f"{given if isinstance(given, str) else ''} {family if isinstance(family, str) else ''}"
+        )
+        name = name.strip()
+        if name:
+            orcid = item.get("ORCID")
+            authors.append(Author(name=name, orcid=orcid if isinstance(orcid, str) else None))
+    return authors
+
+
+def _reference_to_summary(item: Any) -> PaperSummary | None:
+    if not isinstance(item, dict):
+        return None
+    identifiers: dict[str, str] = {}
+    doi = item.get("DOI")
+    if isinstance(doi, str) and doi.strip():
+        identifiers["doi"] = normalize_doi(doi)
+    title = item.get("article-title")
+    if isinstance(title, list):
+        title = title[0] if title else None
+    authors = _authors(item.get("author"))
+    year = _year(item)
+    if not isinstance(title, str):
+        title = ""
+    if not (title or identifiers or authors or year is not None):
+        return None
+    return PaperSummary(title=title, identifiers=identifiers, authors=authors, year=year)
 
 
 def _item_to_paper(item: dict[str, Any]) -> Paper:
     identifiers: dict[str, str] = {}
-    if item.get("DOI"):
-        identifiers["doi"] = normalize_doi(item["DOI"])
-    titles = item.get("title") or []
-    authors = [
-        Author(name=f"{a.get('given', '')} {a.get('family', '')}".strip(),orcid=a.get('ORCID',''))
-        for a in item.get("author", [])
-        if a.get("family") or a.get("given")
-    ]
-    licenses = item.get("license") or []
-    primary = (item.get("resource") or {}).get("primary") or {}
+    doi = item.get("DOI")
+    if isinstance(doi, str) and doi:
+        identifiers["doi"] = normalize_doi(doi)
+    titles = item.get("title")
+    title = ""
+    if isinstance(titles, list) and titles and isinstance(titles[0], str):
+        title = titles[0]
+    authors = _authors(item.get("author"))
+    licenses = item.get("license")
+    licenses = licenses if isinstance(licenses, list) else []
+    primary_resource = item.get("resource")
+    primary = primary_resource.get("primary") if isinstance(primary_resource, dict) else None
+    primary = primary if isinstance(primary, dict) else {}
+    issns = item.get("ISSN")
+    issn = None
+    if isinstance(issns, list):
+        issn = next((value for value in issns if isinstance(value, str) and value), None)
+    references = item.get("reference")
     return Paper(
-        title=titles[0] if titles else "",
+        title=title,
         identifiers=identifiers,
         authors=authors,
         year=_year(item),
         journal=(item.get("container-title") or [None])[0],
         abstract=_clean_abstract(item.get("abstract")),
         publication_type=item.get("type"),
-        license=licenses[0].get("URL") if licenses else None,
+        license=licenses[0].get("URL") if licenses and isinstance(licenses[0], dict) else None,
         publisher_url=primary.get("URL"),
+        issn=issn,
+        cited_by_count=_count(item.get("is-referenced-by-count")),
+        references_count=_count(item.get("reference-count")),
+        reference_papers=[
+            summary
+            for reference in references
+            if (summary := _reference_to_summary(reference)) is not None
+        ]
+        if isinstance(references, list)
+        else [],
     )
 
 

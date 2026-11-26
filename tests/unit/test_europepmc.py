@@ -30,6 +30,23 @@ RECORD = {
     "isOpenAccess": "Y",
     "license": "cc by",
     "pubTypeList": {"pubType": ["Journal Article"]},
+    "journalInfo": {"journal": {"issn": "0028-0836"}},
+    "citedByCount": 42,
+    "referenceCount": 2,
+    "referenceList": {
+        "reference": [
+            {
+                "title": "Earlier editing work.",
+                "doi": "10.1234/REF",
+                "pmid": "111",
+                "pmcid": "PMC111",
+                "authorString": "Zhang S, Li S",
+                "pubYear": "2020",
+            },
+            {"title": "Untitled reference", "pubYear": 2021},
+            None,
+        ]
+    },
 }
 
 
@@ -58,6 +75,39 @@ def test_search(plugin_ctx: PluginContext) -> None:
     assert paper.oa_status == "gold"
     assert paper.abstract
     assert len(paper.authors) == 2
+    assert paper.issn == "0028-0836"
+    assert paper.cited_by_count == 42
+    assert paper.references_count == 2
+    assert paper.cited_by_papers == []
+    assert paper.impact_factor is None
+    assert len(paper.reference_papers) == 2
+    reference = paper.reference_papers[0]
+    assert reference.title == "Earlier editing work"
+    assert reference.identifiers == {"doi": "10.1234/ref", "pmid": "111", "pmcid": "PMC111"}
+    assert [author.name for author in reference.authors] == ["Zhang S", "Li S"]
+    assert reference.year == 2020
+    assert paper.reference_papers[1].year == 2021
+
+
+@respx.mock
+def test_malformed_extended_fields_are_ignored(plugin_ctx: PluginContext) -> None:
+    record = {
+        **RECORD,
+        "pubYear": "unknown",
+        "journalInfo": {"journal": {"issn": 123}},
+        "citedByCount": True,
+        "referenceCount": -1,
+        "referenceList": "not-a-dict",
+    }
+    respx.get(SEARCH_URL).mock(
+        return_value=httpx.Response(200, json={"resultList": {"result": [record]}})
+    )
+    paper = EuropePmcSearcher(plugin_ctx).search(Query(text="x"), limit=1).items[0]
+    assert paper.year is None
+    assert paper.issn is None
+    assert paper.cited_by_count is None
+    assert paper.references_count is None
+    assert paper.reference_papers == []
 
 
 @respx.mock

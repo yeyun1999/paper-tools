@@ -16,9 +16,11 @@ from paper_tools.core.query import Query
 # Module-level: Typer evals string annotations against module globals, so the
 # dynamic help text must not live in a register() local.
 try:
-    _DEFAULT_SOURCE = load_config().general.default_source
+    _DEFAULT_CONFIG = load_config()
 except ConfigError:
-    _DEFAULT_SOURCE = AppConfig().general.default_source
+    _DEFAULT_CONFIG = AppConfig()
+_DEFAULT_SOURCE = _DEFAULT_CONFIG.general.default_source
+_SEARCH_FIELDS_HELP = render.output_fields_help(_DEFAULT_CONFIG.output.search_fields)
 _SOURCE_HELP = (
     "Search plugin(s); repeat the flag or comma-separate; 'all' searches every "
     f"source with dedup (default: {_DEFAULT_SOURCE}). Available: "
@@ -82,10 +84,7 @@ def register(app: typer.Typer) -> None:
         ] = None,
         fields: Annotated[
             str | None,
-            typer.Option(
-                "--fields",
-                help="Comma-separated Paper fields to keep, e.g. title,doi,year.",
-            ),
+            typer.Option("--fields", help=_SEARCH_FIELDS_HELP),
         ] = None,
         enrich: Annotated[
             bool,
@@ -117,13 +116,23 @@ def register(app: typer.Typer) -> None:
             )
             if source_names is not None and "all" in source_names:
                 source_names = services.registry.names("searcher")
+            selected_fields = render.resolve_output_fields(
+                fields, services.config.output.search_fields
+            )
             page, warnings = services.search.search(
-                q, sources=source_names, limit=limit, cursor=cursor, enrich=enrich
+                q,
+                sources=source_names,
+                limit=limit,
+                cursor=cursor,
+                enrich=enrich,
+                required_fields=render.enrichment_fields(selected_fields) if enrich else None,
             )
             warnings = services.registry.load_warnings + warnings
             data = page.model_dump(mode="json")
-            if fields:
-                data["items"] = [render.filter_fields(item, fields) for item in data["items"]]
+            if selected_fields is not None:
+                data["items"] = [
+                    render.filter_fields(item, selected_fields) for item in data["items"]
+                ]
             if opts.json_output:
                 render.emit_json(render.success_envelope("search", data, warnings))
             else:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from paper_tools.core.models import Author, FullTextCandidate, Paper, SearchPage
+from paper_tools.core.models import Author, FullTextCandidate, Paper, PaperSummary, SearchPage
 from paper_tools.core.plugins import PluginContext, PluginMeta
 from paper_tools.core.query import Query
 
@@ -59,6 +59,46 @@ def _fulltext_links(record: dict[str, Any]) -> list[FullTextCandidate]:
     return links
 
 
+def _count(value: Any) -> int | None:
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
+def _year(value: Any) -> int | None:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None
+
+
+def _reference_to_summary(reference: Any) -> PaperSummary | None:
+    if not isinstance(reference, dict):
+        return None
+    identifiers: dict[str, str] = {}
+    for key, kind in (("doi", "doi"), ("pmid", "pmid"), ("pmcid", "pmcid")):
+        value = reference.get(key)
+        if isinstance(value, (str, int)) and not isinstance(value, bool) and str(value):
+            identifiers[kind] = str(value).lower() if kind == "doi" else str(value)
+    title = reference.get("title")
+    author_string = reference.get("authorString")
+    authors = (
+        [Author(name=name.strip()) for name in author_string.split(",") if name.strip()]
+        if isinstance(author_string, str)
+        else []
+    )
+    year = _year(reference.get("pubYear"))
+    if not (identifiers or title or authors or year is not None):
+        return None
+    return PaperSummary(
+        title=title.rstrip(".") if isinstance(title, str) else "",
+        identifiers=identifiers,
+        authors=authors,
+        year=year,
+    )
+
+
 def _record_to_paper(record: dict[str, Any]) -> Paper:
     identifiers: dict[str, str] = {}
     if record.get("doi"):
@@ -69,26 +109,43 @@ def _record_to_paper(record: dict[str, Any]) -> Paper:
         identifiers["pmcid"] = record["pmcid"]
     authors = [
         Author(name=a.get("fullName", ""))
-        for a in record.get("authorList", {}).get("author", [])
-        if a.get("fullName")
+        for a in (record.get("authorList") or {}).get("author", [])
+        if isinstance(a, dict) and a.get("fullName")
     ]
-    if not authors and record.get("authorString"):
+    if not authors and isinstance(record.get("authorString"), str):
         authors = [Author(name=name.strip()) for name in record["authorString"].split(",")]
     oa_status = "unknown"
     if record.get("isOpenAccess") == "Y":
         oa_status = "gold"
-    year = record.get("pubYear")
+    year = _year(record.get("pubYear"))
+    journal_info = record.get("journalInfo")
+    journal_info = journal_info if isinstance(journal_info, dict) else {}
+    journal = journal_info.get("journal")
+    journal = journal if isinstance(journal, dict) else {}
+    issn = journal.get("issn") or journal_info.get("issn")
+    reference_list = record.get("referenceList")
+    references = reference_list.get("reference") if isinstance(reference_list, dict) else None
     return Paper(
         title=record.get("title", "").rstrip("."),
         identifiers=identifiers,
         authors=authors,
-        year=int(year) if year else None,
+        year=year,
         journal=record.get("journalTitle"),
         abstract=record.get("abstractText"),
         publication_type=(record.get("pubTypeList", {}).get("pubType") or [None])[0],
         oa_status=oa_status,
         license=record.get("license"),
         fulltext_links=_fulltext_links(record),
+        issn=issn if isinstance(issn, str) and issn else None,
+        cited_by_count=_count(record.get("citedByCount")),
+        references_count=_count(record.get("referenceCount")),
+        reference_papers=[
+            summary
+            for reference in references
+            if (summary := _reference_to_summary(reference)) is not None
+        ]
+        if isinstance(references, list)
+        else [],
     )
 
 

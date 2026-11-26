@@ -27,6 +27,8 @@ EFETCH_XML = b"""<?xml version="1.0"?>
       <Article>
         <Journal>
           <Title>Nature</Title>
+          <ISSN ISSNType="Electronic">1476-4687</ISSN>
+          <ISSN ISSNType="Print">0028-0836</ISSN>
           <JournalIssue><PubDate><Year>2023</Year></PubDate></JournalIssue>
         </Journal>
         <ArticleTitle>CRISPR base editing in vivo</ArticleTitle>
@@ -41,6 +43,20 @@ EFETCH_XML = b"""<?xml version="1.0"?>
           <PublicationType>Journal Article</PublicationType>
         </PublicationTypeList>
         <ELocationID EIdType="doi">10.1038/s41586-023-00001-1</ELocationID>
+        <ReferenceList>
+          <Reference>
+            <Citation>Zhang S, Li S. Earlier editing work. Nature. 2020;123:1-9.</Citation>
+            <ArticleIdList>
+              <ArticleId IdType="doi">10.1234/REF</ArticleId>
+              <ArticleId IdType="pubmed">111</ArticleId>
+              <ArticleId IdType="pmc">PMC111</ArticleId>
+            </ArticleIdList>
+          </Reference>
+          <Reference>
+            <Citation>Untitled reference. PMID: 222. 2021.</Citation>
+          </Reference>
+          <Reference><Citation /></Reference>
+        </ReferenceList>
       </Article>
     </MedlineCitation>
     <PubmedData>
@@ -87,6 +103,7 @@ def test_search(plugin_ctx: PluginContext) -> None:
                             {"idtype": "pmc", "value": "PMC1000000"},
                         ],
                         "pubtype": ["Journal Article"],
+                        "issn": "0028-0836",
                     },
                 }
             },
@@ -103,6 +120,8 @@ def test_search(plugin_ctx: PluginContext) -> None:
     }
     assert paper.year == 2023
     assert paper.authors[0].name == "Zhang S"
+    assert paper.issn == "0028-0836"
+    assert paper.cited_by_count is None
 
 
 @respx.mock
@@ -126,6 +145,18 @@ def test_enrich_by_pmid(plugin_ctx: PluginContext) -> None:
     assert paper.identifiers["pmcid"] == "PMC1000000"
     assert paper.year == 2023
     assert paper.authors[0].name == "San Zhang"
+    assert paper.issn == "0028-0836"
+    assert paper.references_count == 3
+    assert paper.cited_by_count is None
+    assert paper.cited_by_papers == []
+    assert paper.impact_factor is None
+    assert len(paper.reference_papers) == 2
+    reference = paper.reference_papers[0]
+    assert reference.title == "Earlier editing work"
+    assert reference.identifiers == {"doi": "10.1234/ref", "pmid": "111", "pmcid": "PMC111"}
+    assert reference.year == 2020
+    assert paper.reference_papers[1].identifiers == {"pmid": "222"}
+    assert paper.reference_papers[1].year == 2021
 
 
 @respx.mock

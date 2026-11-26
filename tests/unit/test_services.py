@@ -13,6 +13,7 @@ from paper_tools.core.errors import (
     UpstreamError,
     UsageError,
 )
+from paper_tools.core.fields import all_field_names
 from paper_tools.core.models import Artifact, ArtifactFormat, FullTextCandidate, Paper, SearchPage
 from paper_tools.core.plugins import PluginMeta
 from paper_tools.core.query import Query
@@ -73,6 +74,36 @@ def test_enrich_cache(services: Services) -> None:
     calls_before = provider.calls
     services.metadata.enrich(stub)
     assert provider.calls == calls_before  # served from cache
+
+
+def test_enrich_continues_for_requested_fields_and_isolates_cache(services: Services) -> None:
+    class CitationMetadata:
+        meta = PluginMeta(name="zzz_citations", version="0.1.0")
+        id_kinds = frozenset({"doi"})
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def enrich(self, paper: Paper) -> Paper:
+            self.calls += 1
+            return Paper(cited_by_count=7)
+
+    provider = CitationMetadata()
+    services.registry.register("metadata", provider)
+    stub = Paper(identifiers={"doi": "10.1000/fake1"})
+    services.metadata.enrich(stub)
+    assert provider.calls == 0
+    paper, _ = services.metadata.enrich(stub, required_fields=["cited_by_count"])
+    assert paper.cited_by_count == 7
+    assert provider.calls == 1
+    services.metadata.enrich(stub, required_fields=["cited_by_count"])
+    assert provider.calls == 1
+    paper, _ = services.metadata.enrich(stub, required_fields=["identifiers.doi", "cited_by_count"])
+    assert paper.identifiers["doi"] == "10.1000/fake1"
+    assert paper.cited_by_count == 7
+    assert provider.calls == 2
+    services.metadata.enrich(stub, required_fields=all_field_names())
+    assert provider.calls == 3
 
 
 def test_fetch_pdf(services: Services, tmp_path: Path) -> None:

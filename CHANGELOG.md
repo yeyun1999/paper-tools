@@ -1,13 +1,23 @@
 # Changelog
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。
-JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.2**）：任何字段变更必须更新
+JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.3**）：任何字段变更必须更新
 `tests/snapshots/schema_v1.json` 快照、在本文件标注，并视为破坏性变更（提升 schema_version）。
 
 ## [未发布]
 
 ### 新增
 
+- **Paper 文献计量与引用关系**：新增 `issn`、`impact_factor`、`cited_by_count`、
+  `references_count`、`cited_by_papers`、`reference_papers`，并从现有上游响应映射可用数据；
+  引用论文使用非递归 `PaperSummary`。无可靠影响因子来源时保持 `null`。
+- **CLI/MCP 默认字段配置**：新增 `[output]` 的 `search_fields` 与 `get_fields`，分别控制
+  `search` 和 `get` 的 JSON 输出；单次 `--fields` / MCP `fields` 覆盖配置，`all` 返回完整
+  Paper。默认 search 为 `title,identifiers.doi,year,cited_by_count,abstract`，默认 get 为
+  `title,identifiers.doi,year,cited_by_count,journal,oa_status,abstract`。
+- **嵌套字段投影**：`--fields` / MCP `fields` 支持对象路径 `identifiers.doi` 与数组路径
+  `authors[].name`，返回保留原对象/数组结构；不再把标识符提升到顶层。`all` 要求补全全部
+  Paper 字段。
 - **MCP 暴露 `locate_fulltext`**：按文献标识符返回排序后的 OA 全文候选，支持
   `format` 过滤与 `locator` 限定，不下载文件；参数和 envelope 与 CLI `locate` 一致。
 
@@ -40,6 +50,12 @@ JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.2**）：任何�
   安全化文章标题，重名时追加 DOI（其次 PMID/PMCID 等 ID）；显式 `output` 保持固定文件名。
   未指定格式时按 `.pdf` / `.xml` / `.txt` 推断，无扩展名时按格式补全（默认 PDF）；
   格式与扩展名冲突或不支持扩展名返回 `USAGE`。
+
+### 变更（破坏性：schema_version 1.2 → 1.3）
+
+- **Paper 扩展文献计量字段并引入默认输出投影**：完整 Paper 新增六个文献计量/引用关系
+  字段；`search` / `get` 在 CLI 与 MCP 默认只返回配置指定的字段。需要完整模型时传
+  `--fields all` 或 MCP `fields="all"`；schema 快照与补全缓存随契约版本更新。
 
 ### 变更（破坏性：schema_version 1.1 → 1.2）
 

@@ -283,7 +283,12 @@ def test_mcp_stdio_full_flow_live(tmp_path: Path) -> None:
             search = payload(
                 await session.call_tool(
                     "search_papers",
-                    {"query": "CRISPR base editing", "source": "pubmed", "limit": 2},
+                    {
+                        "query": "CRISPR base editing",
+                        "source": "pubmed",
+                        "limit": 2,
+                        "fields": "all",
+                    },
                 )
             )
             assert "data" in search, search

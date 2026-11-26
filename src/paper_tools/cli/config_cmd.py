@@ -50,7 +50,10 @@ def get_value(
 def set_value(
     ctx: typer.Context,
     key: Annotated[
-        str, typer.Argument(help="Dotted key: general.*, fetch.*, metadata.*, or plugins.<name>.*")
+        str,
+        typer.Argument(
+            help="Dotted key: general.*, fetch.*, metadata.*, output.*, or plugins.<name>.*"
+        ),
     ],
     value: Annotated[
         str,

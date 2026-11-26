@@ -28,7 +28,7 @@ WORK = {
     "publication_year": 2023,
     "authorships": [{"author": {"display_name": "San Zhang"}}],
     "primary_location": {
-        "source": {"display_name": "Nature"},
+        "source": {"display_name": "Nature", "issn": ["0028-0836"], "issn_l": "0028-0836"},
         "landing_page_url": "https://pub.org/paper",
         "license": "cc-by",
     },
@@ -40,6 +40,10 @@ WORK = {
     },
     "abstract_inverted_index": {"Hello": [0], "CRISPR": [1], "world": [2]},
     "type": "article",
+    "cited_by_count": 42,
+    "referenced_works_count": 3,
+    "referenced_works": ["https://openalex.org/W1", "https://openalex.org/W2"],
+    "summary_2yr_mean_citedness": {"value": 1.5},
 }
 
 
@@ -87,7 +91,28 @@ def test_search_and_normalization(plugin_ctx: PluginContext) -> None:
     assert paper.abstract == "Hello CRISPR world"
     assert paper.oa_status == "gold"
     assert paper.authors[0].name == "San Zhang"
+    assert paper.issn == "0028-0836"
+    assert paper.cited_by_count == 42
+    assert paper.references_count == 3
+    assert paper.reference_papers == []
+    assert paper.cited_by_papers == []
+    assert paper.impact_factor is None
     assert route.calls.last.request.url.params["cursor"] == "*"
+
+
+@respx.mock
+def test_reference_count_falls_back_to_id_list(plugin_ctx: PluginContext) -> None:
+    work = {
+        **WORK,
+        "referenced_works_count": None,
+        "primary_location": {"source": {"issn": [123], "issn_l": "0028-0836"}},
+        "cited_by_count": True,
+    }
+    respx.get(WORKS_URL).mock(return_value=httpx.Response(200, json={"results": [work]}))
+    paper = OpenAlexSearcher(plugin_ctx).search(Query(text="x"), limit=1).items[0]
+    assert paper.references_count == 2
+    assert paper.cited_by_count is None
+    assert paper.issn == "0028-0836"
 
 
 @respx.mock

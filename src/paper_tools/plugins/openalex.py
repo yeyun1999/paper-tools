@@ -41,6 +41,10 @@ def _abstract(inverted: dict[str, list[int]] | None) -> str | None:
     return " ".join(positions[i] for i in sorted(positions))
 
 
+def _count(value: Any) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
 def _work_to_paper(work: dict[str, Any]) -> Paper:
     ids = work.get("ids") or {}
     identifiers: dict[str, str] = {}
@@ -61,6 +65,16 @@ def _work_to_paper(work: dict[str, Any]) -> Paper:
     best = work.get("best_oa_location") or {}
     primary = work.get("primary_location") or {}
     source = primary.get("source") or {}
+    raw_issn = source.get("issn")
+    if isinstance(raw_issn, list):
+        issn = next((value for value in raw_issn if isinstance(value, str) and value), None)
+    else:
+        issn = raw_issn if isinstance(raw_issn, str) and raw_issn else None
+    issn = issn or source.get("issn_l")
+    referenced_works = work.get("referenced_works")
+    references_count = _count(work.get("referenced_works_count"))
+    if references_count is None and isinstance(referenced_works, list):
+        references_count = len(referenced_works)
     authors = [
         Author(name=a["author"]["display_name"])
         for a in work.get("authorships") or []
@@ -94,6 +108,9 @@ def _work_to_paper(work: dict[str, Any]) -> Paper:
         license=best.get("license") or primary.get("license"),
         publisher_url=primary.get("landing_page_url"),
         fulltext_links=links,
+        issn=issn if isinstance(issn, str) and issn else None,
+        cited_by_count=_count(work.get("cited_by_count")),
+        references_count=references_count,
     )
 
 

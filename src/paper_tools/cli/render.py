@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from typing import Any
 
@@ -13,6 +13,7 @@ from rich.table import Table
 
 from paper_tools.cli.context import GlobalOpts
 from paper_tools.core.errors import PaperToolsError
+from paper_tools.core.fields import all_field_names, parse_field_paths, project_field_paths
 from paper_tools.core.models import (
     SCHEMA_VERSION,
     DownloadedFullText,
@@ -71,18 +72,33 @@ def error_guard(opts: GlobalOpts, command: str) -> Iterator[None]:
         raise typer.Exit(exc.exit_code) from exc
 
 
-def filter_fields(data: dict[str, Any], fields: str) -> dict[str, Any]:
-    """Project a Paper dict onto requested fields; identifier kinds are promoted."""
-    result: dict[str, Any] = {}
-    identifiers = data.get("identifiers", {})
-    for field in (f.strip() for f in fields.split(",")):
-        if not field:
-            continue
-        if field in data:
-            result[field] = data[field]
-        elif field in identifiers:
-            result[field] = identifiers[field]
-    return result
+def output_fields_help(default_fields: Sequence[str]) -> str:
+    default = ",".join(default_fields) or "all"
+    return (
+        "Comma-separated Paper field paths; use 'identifiers.doi' for objects and "
+        "'authors[].name' for arrays; 'all' returns every field and requires full enrichment "
+        f"(default: {default})."
+    )
+
+
+def resolve_output_fields(explicit: str | None, configured: Sequence[str]) -> list[str] | None:
+    fields = (
+        [field.strip() for field in explicit.split(",") if field.strip()]
+        if explicit is not None
+        else [field.strip() for field in configured if field.strip()]
+    )
+    if not fields or any(field.lower() == "all" for field in fields):
+        return None
+    parse_field_paths(fields)
+    return fields
+
+
+def enrichment_fields(fields: Sequence[str] | None) -> list[str]:
+    return all_field_names() if fields is None else list(fields)
+
+
+def filter_fields(data: dict[str, Any], fields: Sequence[str]) -> dict[str, Any]:
+    return project_field_paths(data, list(fields))
 
 
 def _truncate(text: str, width: int) -> str:

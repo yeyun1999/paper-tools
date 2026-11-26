@@ -1,7 +1,7 @@
 """MCP server (stdio) exposing the CLI services to AI assistants.
 
 Requires the ``mcp`` extra. Tools return the same JSON envelopes as
-``paper-tools --json`` (schema_version 1.2), so agents can share one contract
+``paper-tools --json`` (schema_version 1.3), so agents can share one contract
 across the shell and MCP channels.
 """
 
@@ -74,6 +74,8 @@ def build_server(opts: GlobalOpts | None = None) -> MCPServer[Any]:
     default_source = services.config.general.default_source
     default_locators = ", ".join(services.config.fetch.locators) or "all"
     default_output = services.config.fetch.output or "safe article title in the current directory"
+    default_search_fields = ",".join(services.config.output.search_fields) or "all"
+    default_get_fields = ",".join(services.config.output.get_fields) or "all"
 
     @server.tool(
         description=(
@@ -119,6 +121,15 @@ def build_server(opts: GlobalOpts | None = None) -> MCPServer[Any]:
             str | None, Field(description="Native engine query (not portable; exclusive).")
         ] = None,
         enrich: Annotated[bool, Field(description="Run the metadata enrichment chain.")] = False,
+        fields: str | None = Field(
+            default=None,
+            description=(
+                "Comma-separated Paper field paths; use 'identifiers.doi' for objects and "
+                "'authors[].name' for arrays; 'all' returns every field and requires full "
+                "enrichment "
+                f"(default: {default_search_fields})."
+            ),
+        ),
     ) -> dict[str, Any]:
         try:
             try:
@@ -138,13 +149,29 @@ def build_server(opts: GlobalOpts | None = None) -> MCPServer[Any]:
             )
             if source_names is not None and "all" in source_names:
                 source_names = services.registry.names("searcher")
+            selected_fields = render.resolve_output_fields(
+                fields, services.config.output.search_fields
+            )
             page, warnings = services.search.search(
-                q, sources=source_names, limit=limit, cursor=cursor, enrich=enrich
+                q,
+                sources=source_names,
+                limit=limit,
+                cursor=cursor,
+                enrich=enrich,
+                required_fields=render.enrichment_fields(selected_fields) if enrich else None,
             )
         except PaperToolsError as exc:
             return _failure(exc)
         warnings = services.registry.load_warnings + warnings
-        return render.success_envelope("search", page.model_dump(mode="json"), warnings)
+        try:
+            data = page.model_dump(mode="json")
+            if selected_fields is not None:
+                data["items"] = [
+                    render.filter_fields(item, selected_fields) for item in data["items"]
+                ]
+        except PaperToolsError as exc:
+            return _failure(exc)
+        return render.success_envelope("search", data, warnings)
 
     @server.tool(
         description=(
@@ -168,15 +195,35 @@ def build_server(opts: GlobalOpts | None = None) -> MCPServer[Any]:
                 f"Restrict enrichment to one metadata plugin. Available: {_available('metadata')}."
             ),
         ),
+        fields: str | None = Field(
+            default=None,
+            description=(
+                "Comma-separated Paper field paths; use 'identifiers.doi' for objects and "
+                "'authors[].name' for arrays; 'all' returns every field and requires full "
+                "enrichment "
+                f"(default: {default_get_fields})."
+            ),
+        ),
     ) -> dict[str, Any]:
         try:
             ident = parse_identifier(identifier)
             stub = Paper(identifiers={ident.kind: ident.value})
-            paper, warnings = services.metadata.enrich(stub, only_source=source)
+            selected_fields = render.resolve_output_fields(
+                fields, services.config.output.get_fields
+            )
+            paper, warnings = services.metadata.enrich(
+                stub, only_source=source, required_fields=render.enrichment_fields(selected_fields)
+            )
         except PaperToolsError as exc:
             return _failure(exc)
         warnings = services.registry.load_warnings + warnings
-        return render.success_envelope("get", paper.model_dump(mode="json"), warnings)
+        try:
+            data = paper.model_dump(mode="json")
+            if selected_fields is not None:
+                data = render.filter_fields(data, selected_fields)
+        except PaperToolsError as exc:
+            return _failure(exc)
+        return render.success_envelope("get", data, warnings)
 
     @server.tool(
         description=(

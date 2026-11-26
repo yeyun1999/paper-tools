@@ -78,7 +78,9 @@ def test_tool_input_schemas(server: Any) -> None:
         "oa_only",
         "raw",
         "enrich",
+        "fields",
     } <= set(search_props)
+    assert "fields" in tools["get_paper"].input_schema["properties"]
     assert tools["get_paper"].input_schema["required"] == ["identifier"]
     locate_schema = tools["locate_fulltext"].input_schema
     assert locate_schema["required"] == ["identifier"]
@@ -119,6 +121,13 @@ def test_param_descriptions_mirror_cli_help(server: Any) -> None:
     )
     assert "duplicate default title gets an ID suffix" in desc("fetch_fulltext", "output")
     assert "infer" in desc("fetch_fulltext", "format")
+    assert "default: title,identifiers.doi,year,cited_by_count,abstract" in desc(
+        "search_papers", "fields"
+    )
+    assert "default: title,identifiers.doi,year,cited_by_count,journal,oa_status,abstract" in desc(
+        "get_paper", "fields"
+    )
+    assert "authors[].name" in desc("search_papers", "fields")
 
 
 def test_search_papers_success(server: Any) -> None:
@@ -127,6 +136,20 @@ def test_search_papers_success(server: Any) -> None:
     assert payload["command"] == "search"
     assert len(payload["data"]["items"]) == 2
     assert payload["data"]["items"][0]["identifiers"]["doi"] == "10.1000/fake1"
+    assert set(payload["data"]["items"][0]) == {
+        "title",
+        "identifiers",
+        "year",
+        "cited_by_count",
+        "abstract",
+    }
+
+
+def test_search_papers_fields_all_and_override(server: Any) -> None:
+    payload = _call(server, "search_papers", {"query": "CRISPR", "fields": "all"})
+    assert payload["data"]["items"][0]["identifiers"]["pmid"] == "111"
+    projected = _call(server, "search_papers", {"query": "CRISPR", "fields": "title"})
+    assert set(projected["data"]["items"][0]) == {"title"}
 
 
 def test_search_papers_invalid_query_returns_error_envelope(server: Any) -> None:
@@ -144,11 +167,54 @@ def test_search_papers_multi_source(server: Any) -> None:
 
 
 def test_get_paper_enriches(server: Any) -> None:
-    payload = _call(server, "get_paper", {"identifier": "doi:10.1000/fake1"})
+    payload = _call(server, "get_paper", {"identifier": "doi:10.1000/fake1", "fields": "all"})
     data = payload["data"]
     assert data["abstract"] == "An abstract about base editing."
     assert data["identifiers"]["pmcid"] == "PMC999"
     assert "fake" in data["sources"]
+
+
+def test_output_config_fields_apply_to_mcp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    services = make_services(tmp_path)
+    services.config.output.search_fields = ["title"]
+    services.config.output.get_fields = ["year"]
+    monkeypatch.setattr(context, "build_services", lambda opts: services)
+    server = mcp_server.build_server()
+    searched = _call(server, "search_papers", {"query": "CRISPR"})
+    assert set(searched["data"]["items"][0]) == {"title"}
+    fetched = _call(server, "get_paper", {"identifier": "doi:10.1000/fake1"})
+    assert set(fetched["data"]) == {"year"}
+
+
+def test_get_paper_invalid_container_path_returns_error(server: Any) -> None:
+    payload = _call(
+        server, "get_paper", {"identifier": "doi:10.1000/fake1", "fields": "authors.name"}
+    )
+    assert payload["error"]["code"] == "USAGE"
+
+
+def test_get_paper_nested_projection(server: Any) -> None:
+    payload = _call(
+        server, "get_paper", {"identifier": "doi:10.1000/fake1", "fields": "authors[].name"}
+    )
+    assert payload["data"] == {"authors": [{"name": "Zhang San"}]}
+
+
+def test_get_paper_default_and_explicit_fields(server: Any) -> None:
+    payload = _call(server, "get_paper", {"identifier": "doi:10.1000/fake1"})
+    assert set(payload["data"]) == {
+        "title",
+        "identifiers",
+        "year",
+        "cited_by_count",
+        "journal",
+        "oa_status",
+        "abstract",
+    }
+    projected = _call(
+        server, "get_paper", {"identifier": "doi:10.1000/fake1", "fields": "title,year"}
+    )
+    assert set(projected["data"]) == {"title", "year"}
 
 
 def test_locate_fulltext_returns_ranked_candidates(server: Any) -> None:

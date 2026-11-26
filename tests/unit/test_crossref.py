@@ -29,6 +29,19 @@ ITEM = {
     "type": "journal-article",
     "license": [{"URL": "http://creativecommons.org/licenses/by/4.0"}],
     "resource": {"primary": {"URL": "https://pub.org/paper"}},
+    "ISSN": ["0028-0836", "1476-4687"],
+    "is-referenced-by-count": 42,
+    "reference-count": 2,
+    "reference": [
+        {
+            "article-title": "Earlier editing work",
+            "DOI": "10.1234/REF",
+            "author": [{"given": "San", "family": "Zhang"}],
+            "year": 2020,
+        },
+        {"DOI": "10.1234/UNTITLED"},
+        None,
+    ],
 }
 
 
@@ -65,6 +78,17 @@ def test_search(plugin_ctx: PluginContext) -> None:
     assert paper.abstract == "Hello CRISPR world"
     assert paper.journal == "Nature"
     assert paper.license == "http://creativecommons.org/licenses/by/4.0"
+    assert paper.issn == "0028-0836"
+    assert paper.cited_by_count == 42
+    assert paper.references_count == 2
+    assert paper.cited_by_papers == []
+    assert paper.impact_factor is None
+    assert paper.reference_papers[0].title == "Earlier editing work"
+    assert paper.reference_papers[0].identifiers == {"doi": "10.1234/ref"}
+    assert paper.reference_papers[0].authors[0].name == "San Zhang"
+    assert paper.reference_papers[0].year == 2020
+    assert paper.reference_papers[1].identifiers == {"doi": "10.1234/untitled"}
+    assert len(paper.reference_papers) == 2
     assert route.calls.last.request.url.params["rows"] == "5"
 
 
@@ -85,6 +109,25 @@ def test_enrich_by_doi(plugin_ctx: PluginContext) -> None:
     paper = CrossrefMetadata(plugin_ctx).enrich(Paper(identifiers={"doi": "10.1234/abc"}))
     assert paper.title == "CRISPR base editing in vivo"
     assert paper.abstract == "Hello CRISPR world"
+
+
+@respx.mock
+def test_malformed_extended_fields_are_ignored(plugin_ctx: PluginContext) -> None:
+    item = {
+        **ITEM,
+        "ISSN": [None, 123],
+        "is-referenced-by-count": True,
+        "reference-count": -1,
+        "reference": "not-a-list",
+        "author": [None, {"given": 123, "family": "Zhang"}],
+    }
+    respx.get(WORKS_URL).mock(return_value=httpx.Response(200, json={"message": {"items": [item]}}))
+    paper = CrossrefSearcher(plugin_ctx).search(Query(text="x"), limit=1).items[0]
+    assert paper.issn is None
+    assert paper.cited_by_count is None
+    assert paper.references_count is None
+    assert paper.reference_papers == []
+    assert paper.authors[0].name == "Zhang"
 
 
 @respx.mock

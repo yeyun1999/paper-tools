@@ -48,6 +48,10 @@ MCP 当前不暴露独立的 `download` / `extract`。需要直接下载候选 U
 - 跨源查全：选择多个来源或 `all`，随后按 DOI/PMID 去重。
 
 默认返回的文献可能是浅记录。摘要、作者、OA 状态或出版类型不足时，启用 `enrich`，或对选中文献调用 `get_paper`。
+`search_papers` 与 `get_paper` 都支持逗号分隔的 `fields` 路径；省略时分别使用
+`output.search_fields` 与 `output.get_fields`。对象用 `.`（如 `identifiers.doi`），数组用
+`[]`（如 `authors[].name`），返回保留原对象/数组结构；传 `fields="all"` 返回全部 Paper
+字段并要求补全全部字段。字段裁剪本身不会让 `search_papers` 自动启用 `enrich`。
 
 ### 2. 选择文献
 

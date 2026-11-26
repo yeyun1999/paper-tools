@@ -40,6 +40,14 @@ def test_search_json(cli: CliRunner) -> None:
     assert payload["command"] == "search"
     assert payload["data"]["source"] == "fake"
     assert len(payload["data"]["items"]) == 2
+    assert set(payload["data"]["items"][0]) == {
+        "title",
+        "identifiers",
+        "year",
+        "cited_by_count",
+        "abstract",
+    }
+    assert payload["data"]["items"][0]["identifiers"]["doi"] == "10.1000/fake1"
 
 
 def test_search_json_flag_before_subcommand(cli: CliRunner) -> None:
@@ -49,9 +57,25 @@ def test_search_json_flag_before_subcommand(cli: CliRunner) -> None:
 
 
 def test_search_fields_projection(cli: CliRunner) -> None:
-    result = cli.invoke(app, ["search", "CRISPR", "--fields", "title,doi", "--json"])
+    result = cli.invoke(app, ["search", "CRISPR", "--fields", "title,identifiers.doi", "--json"])
     item = json.loads(result.stdout)["data"]["items"][0]
-    assert set(item) == {"title", "doi"}
+    assert item == {"title": "CRISPR base editing review", "identifiers": {"doi": "10.1000/fake1"}}
+
+
+def test_search_fields_all(cli: CliRunner) -> None:
+    result = cli.invoke(app, ["search", "CRISPR", "--fields", "all", "--json"])
+    item = json.loads(result.stdout)["data"]["items"][0]
+    assert item["identifiers"]["pmid"] == "111"
+    assert "reference_papers" in item
+
+
+def test_output_config_fields_override_defaults(cli: CliRunner, services: Services) -> None:
+    services.config.output.search_fields = ["title"]
+    services.config.output.get_fields = ["year"]
+    searched = cli.invoke(app, ["search", "CRISPR", "--json"])
+    assert set(json.loads(searched.stdout)["data"]["items"][0]) == {"title"}
+    fetched = cli.invoke(app, ["get", "doi:10.1000/fake1", "--json"])
+    assert set(json.loads(fetched.stdout)["data"]) == {"year"}
 
 
 def test_search_no_query_usage_error(cli: CliRunner) -> None:
@@ -67,12 +91,27 @@ def test_search_human_output(cli: CliRunner) -> None:
 
 
 def test_get_json(cli: CliRunner) -> None:
-    result = cli.invoke(app, ["get", "doi:10.1000/fake1", "--json"])
+    result = cli.invoke(app, ["get", "doi:10.1000/fake1", "--fields", "all", "--json"])
     assert result.exit_code == 0
     data = json.loads(result.stdout)["data"]
     assert data["abstract"]
     assert data["identifiers"]["pmcid"] == "PMC999"
     assert "fake" in data["sources"]
+
+
+def test_get_default_fields(cli: CliRunner) -> None:
+    result = cli.invoke(app, ["get", "doi:10.1000/fake1", "--json"])
+    data = json.loads(result.stdout)["data"]
+    assert set(data) == {
+        "title",
+        "identifiers",
+        "year",
+        "cited_by_count",
+        "journal",
+        "oa_status",
+        "abstract",
+    }
+    assert data["identifiers"]["doi"] == "10.1000/fake1"
 
 
 def test_get_not_found(cli: CliRunner) -> None:
@@ -91,7 +130,15 @@ def test_get_invalid_identifier(cli: CliRunner) -> None:
 def test_get_batch_ndjson(cli: CliRunner) -> None:
     result = cli.invoke(
         app,
-        ["get", "doi:10.1000/fake1", "doi:10.1000/missing", "pmid:111", "--json"],
+        [
+            "get",
+            "doi:10.1000/fake1",
+            "doi:10.1000/missing",
+            "pmid:111",
+            "--fields",
+            "all",
+            "--json",
+        ],
     )
     assert result.exit_code == 3  # first per-ID failure (NOT_FOUND)
     lines = result.stdout.strip().splitlines()
@@ -102,13 +149,36 @@ def test_get_batch_ndjson(cli: CliRunner) -> None:
     assert third["data"]["identifiers"]["pmid"] == "111"
 
 
+def test_get_nested_array_projection(cli: CliRunner) -> None:
+    result = cli.invoke(app, ["get", "doi:10.1000/fake1", "--fields", "authors[].name", "--json"])
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["data"] == {"authors": [{"name": "Zhang San"}]}
+
+
+def test_get_invalid_field_path(cli: CliRunner) -> None:
+    result = cli.invoke(app, ["get", "doi:10.1000/fake1", "--fields", "authors[0]", "--json"])
+    assert result.exit_code == 2
+    assert json.loads(result.stderr)["error"]["code"] == "USAGE"
+
+
 def test_get_batch_fields_projection(cli: CliRunner) -> None:
     result = cli.invoke(
-        app, ["get", "doi:10.1000/fake1", "doi:10.1000/fake2", "--fields", "title,doi", "--json"]
+        app,
+        [
+            "get",
+            "doi:10.1000/fake1",
+            "doi:10.1000/fake2",
+            "--fields",
+            "title,identifiers.doi",
+            "--json",
+        ],
     )
     assert result.exit_code == 0
     for line in result.stdout.strip().splitlines():
-        assert set(json.loads(line)["data"]) == {"title", "doi"}
+        data = json.loads(line)["data"]
+        assert set(data) == {"title", "identifiers"}
+        assert set(data["identifiers"]) == {"doi"}
+        assert data["identifiers"]["doi"] in {"10.1000/fake1", "10.1000/fake2"}
 
 
 def test_get_single_stays_single_object(cli: CliRunner) -> None:
@@ -485,7 +555,10 @@ def test_help_lists_available_plugins_and_descriptions() -> None:
     got = runner.invoke(app, ["get", "--help"])
     assert got.exit_code == 0
     assert "unpaywall" in got.stdout
-    assert "Comma-separated Paper fields to keep" in got.stdout
+    assert "Comma-separated Paper field paths" in got.stdout
+    assert "'all' returns every field and requires full enrichment" in got.stdout
+    assert "identifiers.doi" in got.stdout
+    assert "cited_by_count,journal,oa_status,abstract" in "".join(got.stdout.split())
     assert "openalex:/s2:/arxiv:" in got.stdout
     fetched = runner.invoke(app, ["fetch", "--help"])
     assert fetched.exit_code == 0

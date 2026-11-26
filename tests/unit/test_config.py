@@ -11,7 +11,7 @@ from paper_tools.core.config import (
     mask_secrets,
     set_config_value,
 )
-from paper_tools.core.errors import UsageError
+from paper_tools.core.errors import ConfigError, UsageError
 
 
 def test_defaults() -> None:
@@ -19,6 +19,22 @@ def test_defaults() -> None:
     assert config.general.default_source == "pubmed"
     assert config.general.timeout == 30.0
     assert config.fetch.output is None
+    assert config.output.search_fields == [
+        "title",
+        "identifiers.doi",
+        "year",
+        "cited_by_count",
+        "abstract",
+    ]
+    assert config.output.get_fields == [
+        "title",
+        "identifiers.doi",
+        "year",
+        "cited_by_count",
+        "journal",
+        "oa_status",
+        "abstract",
+    ]
 
 
 def test_file_loading(tmp_path: Path) -> None:
@@ -42,13 +58,31 @@ def test_env_overrides_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     assert config.plugin_config("semantic_scholar")["api_key"] == "secret123"
 
 
+def test_output_env_overrides_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text('[output]\nsearch_fields = ["title"]\n', encoding="utf-8")
+    monkeypatch.setenv("PAPER_TOOLS_OUTPUT__SEARCH_FIELDS", '["identifiers.doi", "year"]')
+    monkeypatch.setenv("PAPER_TOOLS_OUTPUT__GET_FIELDS", "title,abstract")
+    config = load_config(path)
+    assert config.output.search_fields == ["identifiers.doi", "year"]
+    assert config.output.get_fields == ["title", "abstract"]
+
+
+def test_invalid_output_env_value(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PAPER_TOOLS_OUTPUT__SEARCH_FIELDS", "42")
+    with pytest.raises(ConfigError, match="Invalid output configuration"):
+        load_config(tmp_path / "config.toml")
+
+
 def test_set_and_reload(tmp_path: Path) -> None:
     path = tmp_path / "config.toml"
     set_config_value("plugins.unpaywall.email", "me@lab.org", path)
     set_config_value("general.timeout", "45", path)
+    set_config_value("output.search_fields", '["title", "identifiers.doi"]', path)
     config = load_config(path)
     assert config.plugin_config("unpaywall")["email"] == "me@lab.org"
     assert config.general.timeout == 45.0
+    assert config.output.search_fields == ["title", "identifiers.doi"]
 
 
 def test_set_invalid_key(tmp_path: Path) -> None:
