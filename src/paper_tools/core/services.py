@@ -91,6 +91,15 @@ _WINDOWS_RESERVED_NAMES = {
 
 
 def _filename_slug(value: str, *, max_bytes: int = 160) -> str:
+    """Convert text into a portable filename component.
+
+    Args:
+        value: Text to sanitize, typically a paper title or identifier.
+        max_bytes: Maximum UTF-8 byte length before extension appending.
+
+    Returns:
+        A non-empty, Windows-safe slug without path separators.
+    """
     value = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", value)
     value = re.sub(r"\s+", "_", value)
     value = re.sub(r"_+", "_", value).strip(" ._-") or "paper"
@@ -108,12 +117,28 @@ _CURSOR_ESCAPES = (("%", "%25"), (":", "%3A"), (",", "%2C"))
 
 
 def _escape_cursor(value: str) -> str:
+    """Escape cursor separators for use in a multi-source cursor token.
+
+    Args:
+        value: Raw source cursor value.
+
+    Returns:
+        The value with percent, colon, and comma characters escaped.
+    """
     for raw, encoded in _CURSOR_ESCAPES:
         value = value.replace(raw, encoded)
     return value
 
 
 def _unescape_cursor(value: str) -> str:
+    """Reverse escaping of a multi-source cursor value.
+
+    Args:
+        value: Escaped source cursor value.
+
+    Returns:
+        The original cursor value.
+    """
     for raw, encoded in reversed(_CURSOR_ESCAPES):
         value = value.replace(encoded, raw)
     return value
@@ -124,13 +149,29 @@ def encode_multi_cursor(cursors: dict[str, str]) -> str:
 
     Shell-safe by construction: plugin names are registry-validated and
     cursor values are escaped, so the token never needs nested quoting.
+
+    Args:
+        cursors: Mapping of source names to their opaque next-page cursors.
+
+    Returns:
+        An encoded multi-source cursor token.
     """
     body = ",".join(f"{name}:{_escape_cursor(value)}" for name, value in sorted(cursors.items()))
     return _MULTI_CURSOR_PREFIX + body
 
 
 def decode_multi_cursor(cursor: str) -> dict[str, str]:
-    """Parse an ``ms1.`` token; legacy JSON ``{source: cursor}`` objects still work."""
+    """Parse an ``ms1.`` token; legacy JSON ``{source: cursor}`` objects still work.
+
+    Args:
+        cursor: Encoded multi-source cursor or legacy JSON object string.
+
+    Returns:
+        Mapping of source names to decoded opaque cursors.
+
+    Raises:
+        UsageError: If the token is malformed or is not a JSON object.
+    """
     if cursor.startswith(_MULTI_CURSOR_PREFIX):
         body = cursor[len(_MULTI_CURSOR_PREFIX) :]
         if not body:
@@ -158,6 +199,13 @@ class SearchService:
     def __init__(
         self, registry: PluginRegistry, config: AppConfig, metadata: MetadataService
     ) -> None:
+        """Initialize the search service.
+
+        Args:
+            registry: Registry used to resolve searcher plugins.
+            config: Application configuration, including the default source.
+            metadata: Service used for optional result enrichment.
+        """
         self._registry = registry
         self._config = config
         self._metadata = metadata
@@ -171,6 +219,22 @@ class SearchService:
         cursor: str | None = None,
         enrich: bool = False,
     ) -> tuple[SearchPage, list[str]]:
+        """Search one or more sources and optionally enrich the results.
+
+        Args:
+            query: Parsed literature search query.
+            sources: Searcher plugin names; defaults to the configured source.
+            limit: Maximum results requested from each source.
+            cursor: Opaque next-page cursor from a previous response.
+            enrich: Whether to fill missing metadata through ``MetadataService``.
+
+        Returns:
+            A tuple containing the search page and non-fatal warning messages.
+
+        Raises:
+            UsageError: If a requested plugin is unavailable.
+            UpstreamError: If every source in a multi-source search fails.
+        """
         names = sources or [self._config.general.default_source]
         searchers = [(name, cast(Searcher, self._registry.get("searcher", name))) for name in names]
         if len(searchers) == 1:
@@ -190,7 +254,14 @@ class SearchService:
 
     @staticmethod
     def _dedup_key(paper: Paper) -> tuple[str, str] | None:
-        """DOI primary key; PMID fallback; normalized-title fingerprint last."""
+        """Build the best available key for deduplicating a paper.
+
+        Args:
+            paper: Paper to identify.
+
+        Returns:
+            A DOI, PMID, or normalized-title key, or ``None`` if none is usable.
+        """
         if paper.identifiers.get("doi"):
             return ("doi", paper.identifiers["doi"])
         if paper.identifiers.get("pmid"):
@@ -214,6 +285,19 @@ class SearchService:
         sources absent from it are exhausted. Dedup is per page (stateless
         across pages). ``total`` is the pre-dedup sum of per-source totals
         (approximate).
+
+        Args:
+            query: Parsed literature search query.
+            searchers: Source names paired with their searcher plugins.
+            limit: Maximum results requested from each active source.
+            cursor: Aggregated cursor selecting sources that remain active.
+
+        Returns:
+            A deduplicated, interleaved page and non-fatal warnings.
+
+        Raises:
+            UsageError: If the aggregated cursor is malformed.
+            UpstreamError: If every active source fails.
         """
         cursors: dict[str, str] = {}
         if cursor is not None:
@@ -278,11 +362,37 @@ class MetadataService:
     """Enrichment chain: route by id_kinds, fill-missing merge, cache results."""
 
     def __init__(self, registry: PluginRegistry, config: AppConfig, cache: Cache) -> None:
+        """Initialize the metadata enrichment service.
+
+        Args:
+            registry: Registry used to resolve metadata providers.
+            config: Application configuration, including provider priority.
+            cache: Cache used to reuse enriched metadata.
+        """
         self._registry = registry
         self._config = config
         self._cache = cache
 
     def enrich(self, paper: Paper, *, only_source: str | None = None) -> tuple[Paper, list[str]]:
+        """Fill missing paper metadata using compatible providers.
+
+        Providers run in configured priority order and stop once the title and
+        abstract are present. Cached results are merged without overwriting
+        values already supplied by the caller.
+
+        Args:
+            paper: Paper whose identifiers seed the enrichment chain.
+            only_source: Restrict the chain to one metadata provider.
+
+        Returns:
+            The enriched paper and non-fatal warning messages.
+
+        Raises:
+            UsageError: If ``only_source`` cannot handle the paper's identifiers.
+            ConfigError: If a provider reports invalid configuration.
+            NotFoundError: If no provider accepts the identifiers or no title is found.
+            UpstreamError: If all eligible providers fail.
+        """
         warnings: list[str] = []
         providers = [
             cast(MetadataProvider, p)
@@ -353,6 +463,14 @@ class FetchService:
         cache: Cache,
         metadata: MetadataService,
     ) -> None:
+        """Initialize the full-text pipeline.
+
+        Args:
+            registry: Registry used to resolve locator, downloader, and extractor plugins.
+            config: Application configuration, including default locators and output.
+            cache: Cache for artifacts and output-file mappings.
+            metadata: Service used to resolve identifiers and enrich paper metadata.
+        """
         self._registry = registry
         self._config = config
         self._cache = cache
@@ -361,6 +479,20 @@ class FetchService:
     def _locate(
         self, identifier: str, locators: list[str] | None
     ) -> tuple[Paper, list[FullTextCandidate], list[str]]:
+        """Resolve an identifier and collect full-text candidates.
+
+        Args:
+            identifier: DOI, PMID, PMCID, or other identifier accepted by the parser.
+            locators: Locator plugin names, or ``None`` to use configured locators.
+
+        Returns:
+            The enriched paper, deduplicated candidates, and non-fatal warnings.
+
+        Raises:
+            UsageError: If the identifier or plugin selection is invalid.
+            NotFoundError: If metadata cannot be resolved.
+            UpstreamError: If metadata enrichment fails.
+        """
         ident = parse_identifier(identifier)
         stub = Paper(identifiers={ident.kind: ident.value})
         paper, warnings = self._metadata.enrich(stub)
@@ -373,6 +505,21 @@ class FetchService:
         fmt: ArtifactFormat | None = None,
         locators: list[str] | None = None,
     ) -> tuple[FullTextLinks, list[str]]:
+        """Find and rank open-access full-text locations without downloading them.
+
+        Args:
+            identifier: Paper identifier accepted by ``parse_identifier``.
+            fmt: Required output format; landing-page candidates are always excluded.
+            locators: Locator plugin names, or ``None`` to use configured locators.
+
+        Returns:
+            Paper metadata, ranked candidates, and non-fatal warnings.
+
+        Raises:
+            UsageError: If the identifier or plugin selection is invalid.
+            NotFoundError: If metadata cannot be resolved.
+            UpstreamError: If metadata enrichment fails.
+        """
         paper, candidates, warnings = self._locate(identifier, locators)
         if fmt is not None:
             candidates = [
@@ -395,6 +542,29 @@ class FetchService:
         downloader: str | None = None,
         extractor: str | None = None,
     ) -> tuple[FullText, list[str]]:
+        """Retrieve, validate, optionally extract, and store a paper's full text.
+
+        Ranked candidates are tried until one succeeds. ``text`` output can be
+        extracted from PDF, XML, or text artifacts; other formats require an
+        exact format match. Reusable results may be served from cache.
+
+        Args:
+            identifier: Paper identifier accepted by ``parse_identifier``.
+            fmt: Desired output format; defaults to PDF unless inferred elsewhere.
+            output: Explicit output file or configured output path override.
+            locators: Locator plugin names, or ``None`` to use configured locators.
+            downloader: Force one downloader plugin instead of candidate recommendations.
+            extractor: Force one extractor plugin for conversion to text.
+
+        Returns:
+            The stored full-text record, warnings, and failed-attempt messages.
+
+        Raises:
+            UsageError: If an argument, output path, or forced plugin is invalid.
+            ConfigError: If no suitable extractor is installed or configured.
+            FullTextUnavailableError: If no candidate can be retrieved successfully.
+            UpstreamError: If metadata enrichment fails.
+        """
         output_path, artifact_format = self._resolve_output(fmt, output)
         paper, candidates, warnings = self._locate(identifier, locators)
         if output_path is None:
@@ -441,6 +611,24 @@ class FetchService:
         output: Path | None = None,
         downloader: str | None = None,
     ) -> tuple[DownloadedFullText, list[str]]:
+        """Download and validate a full-text file from an explicit HTTP(S) URL.
+
+        The format is taken from ``fmt``, then the output extension, then the
+        URL extension. Without ``output``, a filename is derived from the URL.
+
+        Args:
+            url: Absolute HTTP or HTTPS URL of the full-text file.
+            fmt: Explicit artifact format, otherwise inferred when possible.
+            output: Destination path; defaults to a filename in the current directory.
+            downloader: Force one downloader plugin instead of recommendations.
+
+        Returns:
+            The stored download record and failed-attempt messages.
+
+        Raises:
+            UsageError: If the URL, format, output path, or downloader is invalid.
+            UpstreamError: If download or content validation fails.
+        """
         parsed = urlparse(url)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise UsageError(f"Expected an HTTP(S) full-text URL, got {url!r}.")
@@ -500,6 +688,21 @@ class FetchService:
         output: Path | None = None,
         extractor: str | None = None,
     ) -> tuple[ExtractedFullText, list[str]]:
+        """Extract UTF-8 text from a local PDF or JATS XML file.
+
+        Args:
+            source: Existing ``.pdf`` or ``.xml`` input file.
+            output: Destination text file; defaults to ``source`` with a ``.txt`` suffix.
+            extractor: Force one extractor plugin instead of the preferred extractor.
+
+        Returns:
+            The extraction record and non-fatal warning messages.
+
+        Raises:
+            UsageError: If the input or output path, extension, or extractor is invalid.
+            ConfigError: If no suitable extractor is installed or configured.
+            UpstreamError: If input validation or text extraction fails.
+        """
         if not source.is_file():
             raise UsageError(f"Input file not found: {source}")
         source_format = _OUTPUT_EXTENSIONS.get(source.suffix.lower())
@@ -533,6 +736,16 @@ class FetchService:
         )
 
     def _store_output(self, data: bytes, ext: str, output_path: Path) -> str:
+        """Store content by digest and write it to the requested output path.
+
+        Args:
+            data: Final file content.
+            ext: Extension without a leading dot, such as ``pdf`` or ``txt``.
+            output_path: Destination path, whose parent directories are created.
+
+        Returns:
+            The SHA-256 digest of the content.
+        """
         _, digest = self._cache.store_file(data, ext)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_bytes(data)
@@ -541,6 +754,18 @@ class FetchService:
     def _resolve_output(
         self, fmt: ArtifactFormat | None, output: Path | None
     ) -> tuple[Path | None, ArtifactFormat]:
+        """Resolve the final output path and validate its format.
+
+        Args:
+            fmt: Explicit format, which must agree with a recognized output suffix.
+            output: Explicit path, configured path, or ``None`` for automatic naming.
+
+        Returns:
+            The resolved path (or ``None``) and effective artifact format.
+
+        Raises:
+            UsageError: If the path is a directory or its extension conflicts with the format.
+        """
         configured_output = self._config.fetch.output
         output_path = output or (Path(configured_output) if configured_output else None)
         if output_path is None:
@@ -564,6 +789,16 @@ class FetchService:
         return output_path, artifact_format
 
     def _default_output(self, paper: Paper, fmt: ArtifactFormat, fallback_id: str) -> Path:
+        """Choose a title-based output filename without overwriting an existing file.
+
+        Args:
+            paper: Paper supplying the title and preferred identifiers.
+            fmt: Output format used to select the extension.
+            fallback_id: Identifier used when the paper has no preferred identifier.
+
+        Returns:
+            A title-only path, or a title-and-identifier path on collision.
+        """
         title_slug = _filename_slug(paper.title or "paper")
         extension = _FORMAT_EXTENSIONS[fmt]
         output_path = Path(f"{title_slug}{extension}")
@@ -582,6 +817,24 @@ class FetchService:
     def _collect_candidates(
         self, paper: Paper, locators: list[str] | None, warnings: list[str]
     ) -> list[FullTextCandidate]:
+        """Collect and deduplicate full-text candidates from metadata and locators.
+
+        Existing paper links seed the pool. Configured or selected locators then
+        contribute fallback candidates, and downloader recommendations are filled
+        in for every result.
+
+        Args:
+            paper: Enriched paper with optional existing full-text links.
+            locators: Locator names; ``None`` uses configuration, while an empty
+                list enables every registered locator.
+            warnings: Mutable list to which non-fatal locator errors are appended.
+
+        Returns:
+            Candidates deduplicated by URL and format.
+
+        Raises:
+            UsageError: If a requested locator plugin is unavailable.
+        """
         names = locators if locators is not None else self._config.fetch.locators
         plugins = (
             [cast(Locator, self._registry.get("locator", name)) for name in names]
@@ -591,6 +844,11 @@ class FetchService:
         collected: dict[tuple[str, str], FullTextCandidate] = {}
 
         def add(candidate: FullTextCandidate) -> None:
+            """Add a candidate or merge it with an existing URL/format match.
+
+            Args:
+                candidate: Candidate to insert into the collection.
+            """
             key = (candidate.url, candidate.format)
             if key in collected:
                 collected[key] = merge_candidate(collected[key], candidate)
@@ -620,7 +878,29 @@ class FetchService:
     def _rank(
         self, candidates: list[FullTextCandidate], fmt: ArtifactFormat
     ) -> list[FullTextCandidate]:
+        """Sort candidates by format fit, locator trust, and license availability.
+
+        For text output, XML ranks before text and PDF. Trusted locators rank
+        ahead of Unpaywall and other sources; candidates with a known license
+        rank ahead of those without one. Original order breaks ties.
+
+        Args:
+            candidates: Candidates to rank.
+            fmt: Requested output format.
+
+        Returns:
+            A new list ordered from most to least preferred.
+        """
+
         def key(c: FullTextCandidate) -> tuple[int, int, int]:
+            """Build the format, trust, and license sort key for a candidate.
+
+            Args:
+                c: Candidate to score.
+
+            Returns:
+                A tuple where lower values indicate higher preference.
+            """
             if fmt == "text":
                 format_score = {"xml": 0, "text": 1, "pdf": 2}.get(c.format, 3)
             else:
@@ -634,6 +914,16 @@ class FetchService:
 
     @staticmethod
     def _format_compatible(candidate: FullTextCandidate, fmt: ArtifactFormat) -> bool:
+        """Check whether a candidate can satisfy the requested output format.
+
+        Args:
+            candidate: Candidate whose artifact format is checked.
+            fmt: Requested output format.
+
+        Returns:
+            ``True`` for exact matches, or for PDF, XML, and text candidates
+            when text output is requested. Landing pages are never compatible.
+        """
         if candidate.format == "landing":
             return False
         if fmt == "text":
@@ -641,6 +931,14 @@ class FetchService:
         return candidate.format == fmt
 
     def _matching_downloaders(self, candidate: FullTextCandidate) -> list[Downloader]:
+        """Find downloaders that support a candidate's format and URL.
+
+        Args:
+            candidate: Full-text candidate to download.
+
+        Returns:
+            Matching downloaders, with specific plugins before ``http_direct``.
+        """
         downloaders = [
             cast(Downloader, d)
             for d in self._registry.list("downloader")
@@ -650,11 +948,31 @@ class FetchService:
         return sorted(downloaders, key=lambda d: d.meta.name == "http_direct")
 
     def _recommended_downloader_names(self, candidate: FullTextCandidate) -> list[str]:
+        """List downloader plugin names suitable for a candidate.
+
+        Args:
+            candidate: Full-text candidate to download.
+
+        Returns:
+            Recommended plugin names in fallback order.
+        """
         return [downloader.meta.name for downloader in self._matching_downloaders(candidate)]
 
     def _downloaders_for(
         self, candidate: FullTextCandidate, forced: str | None
     ) -> list[Downloader]:
+        """Resolve the downloader fallback chain for a candidate.
+
+        Args:
+            candidate: Full-text candidate to download.
+            forced: Optional plugin name that disables automatic fallback.
+
+        Returns:
+            Available, compatible downloaders in attempt order.
+
+        Raises:
+            UsageError: If the forced plugin is unavailable or incompatible.
+        """
         if forced is not None:
             dl = cast(Downloader, self._registry.get("downloader", forced))
             if candidate.format not in dl.formats or not dl.supports(candidate):
@@ -676,6 +994,15 @@ class FetchService:
     def _cached_artifact(
         self, candidate: FullTextCandidate, fmt: ArtifactFormat
     ) -> Artifact | None:
+        """Load a previously stored final artifact for a URL and output format.
+
+        Args:
+            candidate: Candidate whose cached file mapping is looked up.
+            fmt: Requested final artifact format.
+
+        Returns:
+            Cached content marked with downloader ``cache``, or ``None`` on a miss.
+        """
         mapping = self._cache.get(f"file:{candidate.url}:{fmt}")
         if not isinstance(mapping, dict):
             return None
@@ -694,6 +1021,19 @@ class FetchService:
     def _download(
         self, candidate: FullTextCandidate, forced: str | None, attempts: list[str]
     ) -> Artifact | None:
+        """Try compatible downloaders until one returns an artifact.
+
+        Args:
+            candidate: Full-text candidate to download.
+            forced: Optional plugin name that disables automatic fallback.
+            attempts: Mutable list to which downloader failures are appended.
+
+        Returns:
+            The first downloaded artifact, or ``None`` if every downloader fails.
+
+        Raises:
+            UsageError: If the forced plugin is unavailable or incompatible.
+        """
         for dl in self._downloaders_for(candidate, forced):
             try:
                 return dl.download(candidate)
@@ -706,6 +1046,17 @@ class FetchService:
 
     @staticmethod
     def _validate(artifact: Artifact) -> None:
+        """Validate downloaded content before extraction or storage.
+
+        PDFs must have a PDF signature and at least 1 KiB of content. XML must
+        parse safely and have an ``article`` root element. Text must be non-empty.
+
+        Args:
+            artifact: Downloaded artifact to validate.
+
+        Raises:
+            UpstreamError: If the content does not match its declared format.
+        """
         if artifact.format == "pdf" and (
             not artifact.content.startswith(b"%PDF") or len(artifact.content) < 1024
         ):
@@ -724,6 +1075,19 @@ class FetchService:
             raise UpstreamError("Downloaded text is empty", url=artifact.source_url)
 
     def _pick_extractor(self, source_format: str, forced: str | None) -> Extractor:
+        """Select an extractor compatible with the source artifact format.
+
+        Args:
+            source_format: Format of the artifact to extract.
+            forced: Optional plugin name; otherwise the preferred extractor is used.
+
+        Returns:
+            The selected extractor plugin.
+
+        Raises:
+            UsageError: If the forced plugin is unavailable or incompatible.
+            ConfigError: If no compatible extractor is installed.
+        """
         if forced is not None:
             ext = cast(Extractor, self._registry.get("extractor", forced))
             if source_format not in ext.source_formats:
@@ -746,6 +1110,21 @@ class FetchService:
         extractor_name: str | None,
         warnings: list[str],
     ) -> tuple[bytes, str, str, Literal["pdf", "xml"]]:
+        """Extract non-empty text and encode it as UTF-8.
+
+        Args:
+            artifact: Validated PDF or XML artifact.
+            extractor_name: Optional extractor plugin name.
+            warnings: Mutable list for quality warnings, including PDF extraction caveats.
+
+        Returns:
+            UTF-8 bytes, ``txt`` extension, extractor name, and source format.
+
+        Raises:
+            UsageError: If the requested extractor is unavailable or incompatible.
+            ConfigError: If no compatible extractor is installed.
+            UpstreamError: If the extractor produces empty text.
+        """
         extractor = self._pick_extractor(artifact.format, extractor_name)
         text = extractor.extract(artifact.content, source_format=artifact.format)
         if not text.strip():
@@ -769,6 +1148,28 @@ class FetchService:
         extractor_name: str | None,
         warnings: list[str],
     ) -> FullText:
+        """Finalize an artifact, write the output, and record reusable provenance.
+
+        Cached artifacts are already final products and are not re-extracted.
+        Fresh PDF or XML artifacts are converted when text output is requested.
+
+        Args:
+            paper: Metadata associated with the full text.
+            artifact: Downloaded or cached artifact.
+            candidate: Candidate that supplied the artifact URL and license.
+            fmt: Requested final output format.
+            output_path: Destination path for the final content.
+            extractor_name: Optional extractor plugin name for text conversion.
+            warnings: Mutable list for extraction warnings.
+
+        Returns:
+            A full-text record containing paths, digests, and provenance.
+
+        Raises:
+            UsageError: If the requested extractor is unavailable or incompatible.
+            ConfigError: If no compatible extractor is installed.
+            UpstreamError: If text extraction fails.
+        """
         extractor_used: str | None = None
         extracted_from: ArtifactFormat | None = None
         if artifact.downloader == "cache":
@@ -822,6 +1223,7 @@ class Services:
     fetch: FetchService = field(init=False)
 
     def __post_init__(self) -> None:
+        """Construct metadata, search, and fetch services from shared dependencies."""
         self.metadata = MetadataService(self.registry, self.config, self.cache)
         self.search = SearchService(self.registry, self.config, self.metadata)
         self.fetch = FetchService(self.registry, self.config, self.cache, self.metadata)
