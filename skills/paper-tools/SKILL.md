@@ -14,7 +14,7 @@ description: 使用 paper-tools CLI 或 MCP 检索生物医学文献、补全元
 - 只要最终全文：使用 `fetch`，一次完成定位、下载和可选文本提取。
 - 需要检查候选链接或下载器：依次使用 `locate` → `download` → `extract`。
 - 只要元数据：使用 `get`；批量检索使用 `search`。
-- 通过 AI 客户端远程调用：使用 MCP 的 `search_papers` / `get_paper` / `fetch_fulltext`。
+- 通过 AI 客户端远程调用：使用 MCP 的 `search_papers` / `get_paper` / `locate_fulltext` / `fetch_fulltext`。
 
 ## 标准流程
 

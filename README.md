@@ -31,7 +31,7 @@ paper-tools sources                            # 查看已注册插件
 
 `download` 未指定格式时依次按 `--output` 扩展名和 URL 路径推断；未提供 `--output` 且 URL 无法识别时必须提供 `--format`，显式无扩展名的 `--output` 默认 PDF。默认文件名取自 URL。内置下载器已统一为 `http_direct`，Europe PMC、PMC S3 和其他 HTTP(S) 直链都由它处理。`locate` 的每个候选会返回 `locator` 来源列表和有序的 `downloaders` 推荐列表；`fetch` 按该顺序尝试下载，显式 `--downloader` 仍可强制覆盖。`extract` 只支持 PDF/JATS XML → text，默认把输入文件同目录的同名文件改为 `.txt`，也可用 `--output` 指定位置。三个新命令同样支持 `--json`，并返回各自的结果模型。
 
-AI 助理除 `--json` CLI 外，还可挂载 MCP 服务器（stdio，四个工具与 CLI 契约一致）：
+AI 助理除 `--json` CLI 外，还可挂载 MCP 服务器（stdio，五个工具与 CLI 契约一致）：
 
 ```bash
 uv sync --extra mcp

@@ -25,10 +25,10 @@ if TYPE_CHECKING:
 _INSTRUCTIONS = """\
 Literature search and open-access full-text retrieval for biomedical research.
 
-Typical flow: search_papers -> get_paper (full metadata) -> fetch_fulltext
-(pdf / xml / text). Only official APIs and open-access copies are used;
-closed-access papers return an error envelope with code FULLTEXT_UNAVAILABLE
-and a publisher link instead of full text.
+Typical flow: search_papers -> get_paper (full metadata) -> locate_fulltext
+(inspect OA candidates) -> fetch_fulltext (pdf / xml / text). Only official APIs
+and open-access copies are used; closed-access papers return an error envelope
+with code FULLTEXT_UNAVAILABLE and a publisher link instead of full text.
 
 Every tool returns a JSON object: on success {schema_version, command, data,
 warnings}; on failure {schema_version, error: {code, message, details}}.
@@ -51,7 +51,7 @@ def _import_mcp() -> type[MCPServer[Any]]:
 
 
 def build_server(opts: GlobalOpts | None = None) -> MCPServer[Any]:
-    """Construct the MCPServer with the four paper-tools tools registered."""
+    """Construct the MCPServer with the five paper-tools tools registered."""
     mcp_server_cls = _import_mcp()
     opts = opts or GlobalOpts()
     services = context.build_services(opts)
@@ -177,6 +177,50 @@ def build_server(opts: GlobalOpts | None = None) -> MCPServer[Any]:
             return _failure(exc)
         warnings = services.registry.load_warnings + warnings
         return render.success_envelope("get", paper.model_dump(mode="json"), warnings)
+
+    @server.tool(
+        description=(
+            "Resolve open-access full-text candidates for one paper without downloading. "
+            "Returns ranked links with formats, locator sources, downloader recommendations, "
+            "and licenses."
+        )
+    )
+    def locate_fulltext(
+        identifier: Annotated[str, Field(description="doi:/pmid:/pmcid: ID or bare DOI.")],
+        format: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Filter candidates to pdf or xml; text includes pdf/xml/text sources. "
+                    "If omitted, show all formats including landing pages."
+                )
+            ),
+        ] = None,
+        locator: str | None = Field(
+            default=None,
+            description=(
+                "Locator plugins to restrict to, comma-separated; 'all' forces every "
+                f"registered locator (default: {default_locators}). "
+                f"Available: {_available('locator')}."
+            ),
+        ),
+    ) -> dict[str, Any]:
+        try:
+            if format is not None and format not in ("pdf", "xml", "text"):
+                raise UsageError(f"Invalid format {format!r}; expected pdf, xml, or text.")
+            artifact_format = cast(ArtifactFormat, format) if format is not None else None
+            locator_names = (
+                [name.strip() for name in locator.split(",") if name.strip()] if locator else None
+            )
+            if locator_names is not None and "all" in locator_names:
+                locator_names = []
+            result, warnings = services.fetch.locate(
+                identifier, fmt=artifact_format, locators=locator_names
+            )
+        except PaperToolsError as exc:
+            return _failure(exc)
+        warnings = services.registry.load_warnings + warnings
+        return render.success_envelope("locate", result.model_dump(mode="json"), warnings)
 
     @server.tool(
         description=(

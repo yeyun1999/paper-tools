@@ -487,18 +487,19 @@ paper-tools fetch doi:10.1038/s41586-020-2649-2 --output papers/paper.txt --json
 ## 10. MCP 服务器（M5，已实现）
 
 - 可选依赖：extra `mcp`（官方 SDK `mcp>=2.0`，`MCPServer`）；`uv sync --extra mcp` 后运行 `paper-tools mcp`（stdio）。缺 extra 时命令报 USAGE（退出码 2）并给出安装指引；SDK 惰性导入，核心 CLI 不依赖 extra。
-- 直接复用服务层（与 CLI 同一 `context.build_services`），暴露四个工具：
+- 直接复用服务层（与 CLI 同一 `context.build_services`），暴露五个工具：
 
 | MCP 工具 | 对应服务 | 返回 |
 |---|---|---|
 | `search_papers` | SearchService.search（可选 enrich） | SearchPage envelope |
 | `get_paper` | MetadataService 补全链 | Paper envelope |
+| `locate_fulltext` | FetchService.locate | FullTextLinks envelope（候选链接、格式、下载器推荐，不下载） |
 | `fetch_fulltext` | FetchService（定位→下载→提取） | FullText envelope（含落盘路径） |
 | `list_sources` | PluginRegistry.describe | 五角色插件清单 envelope |
 
 - 入参语义与 CLI 选项同源（pydantic `Field` 注解生成 inputSchema）；返回与 `--json` 完全一致的 success/error envelope（schema_version 1.2）。业务错误不抛异常，而是返回 `{"error": {code, message, details}}` envelope，agent 按 `error.code` 分支处理。
 - stdio 纯度：协议外输出全部走 stderr（logging 已配置 stderr）；工具函数为同步实现，由 SDK 调度。
-- 契约测试：`tests/test_mcp.py`（fake 插件下四工具 envelope/错误路径 + 真实子进程 stdio 往返 + 入参 schema 冻结）；`tests/integration/test_live.py::test_mcp_stdio_full_flow_live`（真实 API 下 search→get→fetch 全流程）。
+- 契约测试：`tests/test_mcp.py`（fake 插件下五工具 envelope/错误路径 + 真实子进程 stdio 往返 + 入参 schema 冻结）；`tests/integration/test_live.py::test_mcp_stdio_full_flow_live`（真实 API 下 search→get→fetch 全流程）。
 - 挂载配置与调用范式见 [examples/agent-usage.md](../examples/agent-usage.md)。
 
 ## 11. 配置系统

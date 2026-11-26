@@ -31,9 +31,10 @@ paper-tools mcp
 | `list_sources` | 不确定可用搜索器、定位器、下载器或提取器时 |
 | `search_papers` | 按关键词、字段或 raw 语法检索文献 |
 | `get_paper` | 已确定文献标识符，需要完整元数据 |
+| `locate_fulltext` | 已确定文献标识符，需要检查 OA 候选链接、格式和下载器推荐，但不下载 |
 | `fetch_fulltext` | 已确定文献标识符，需要 OA 全文文件或纯文本 |
 
-MCP 当前不暴露独立的 `locate` / `download` / `extract`。需要先检查候选链接、下载器或分阶段落盘时，使用 CLI。
+MCP 当前不暴露独立的 `download` / `extract`。需要直接下载候选 URL 或对本地文件分阶段提取时，使用 CLI。
 
 ## 推荐工作流
 
@@ -62,7 +63,15 @@ MCP 当前不暴露独立的 `locate` / `download` / `extract`。需要先检查
 
 对选中文献调用 `get_paper`。优先使用已有标识符；只有当前来源信息不足时再限定其他 metadata 插件。
 
-### 4. 获取全文
+### 4. 检查全文候选（可选）
+
+调用 `locate_fulltext` 查看排序后的 OA 候选，不下载文件：
+
+- 检查 `format`、`locator`、`downloaders` 和 `license`。
+- 用 `format=pdf|xml|text` 过滤候选；省略时包含 landing page。
+- 用 `locator` 限定定位器，传 `all` 强制使用全部已注册定位器。
+
+### 5. 获取全文
 
 调用 `fetch_fulltext`：
 
@@ -71,7 +80,7 @@ MCP 当前不暴露独立的 `locate` / `download` / `extract`。需要先检查
 - 输出路径应明确、可写，并使用与目标格式一致的扩展名。
 - 让程序使用默认定位器、下载器和提取器；只有诊断或特殊需求时才强制指定插件。
 
-### 5. 消费结果
+### 6. 消费结果
 
 - 始终先检查返回对象是否包含 `error`。
 - 成功时读取 `data`，并检查 `warnings` 是否影响结果可用性。

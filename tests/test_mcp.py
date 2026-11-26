@@ -52,6 +52,7 @@ def test_tools_registered(server: Any) -> None:
     assert asyncio.run(run()) == [
         "search_papers",
         "get_paper",
+        "locate_fulltext",
         "fetch_fulltext",
         "list_sources",
     ]
@@ -79,6 +80,10 @@ def test_tool_input_schemas(server: Any) -> None:
         "enrich",
     } <= set(search_props)
     assert tools["get_paper"].input_schema["required"] == ["identifier"]
+    locate_schema = tools["locate_fulltext"].input_schema
+    assert locate_schema["required"] == ["identifier"]
+    assert {"format", "locator"} <= set(locate_schema["properties"])
+    assert not {"output", "downloader", "extractor"} & set(locate_schema["properties"])
     fetch_schema = tools["fetch_fulltext"].input_schema
     assert fetch_schema["required"] == ["identifier"]
     assert {"format", "output", "locator", "downloader", "extractor"} <= set(
@@ -102,6 +107,9 @@ def test_param_descriptions_mirror_cli_help(server: Any) -> None:
     assert "default: fake" in desc("search_papers", "source")
     assert "Available: fake" in desc("search_papers", "source")
     assert "Available: fake, fake2" in desc("get_paper", "source")
+    assert "default: all" in desc("locate_fulltext", "locator")
+    assert "Available: fake" in desc("locate_fulltext", "locator")
+    assert "landing pages" in desc("locate_fulltext", "format")
     assert "default: all" in desc("fetch_fulltext", "locator")
     assert "Available: fake" in desc("fetch_fulltext", "locator")
     assert "Available: fake_dl" in desc("fetch_fulltext", "downloader")
@@ -141,6 +149,39 @@ def test_get_paper_enriches(server: Any) -> None:
     assert data["abstract"] == "An abstract about base editing."
     assert data["identifiers"]["pmcid"] == "PMC999"
     assert "fake" in data["sources"]
+
+
+def test_locate_fulltext_returns_ranked_candidates(server: Any) -> None:
+    payload = _call(server, "locate_fulltext", {"identifier": "doi:10.1000/fake1"})
+    assert payload["command"] == "locate"
+    assert payload["data"]["paper"]["title"] == "CRISPR base editing review"
+    candidates = payload["data"]["candidates"]
+    assert [item["format"] for item in candidates] == ["pdf", "xml", "landing"]
+    assert candidates[0]["downloaders"] == ["fake_dl"]
+    assert candidates[0]["locator"] == ["fake"]
+
+
+def test_locate_fulltext_format_filter(server: Any) -> None:
+    payload = _call(
+        server, "locate_fulltext", {"identifier": "doi:10.1000/fake1", "format": "text"}
+    )
+    assert [item["format"] for item in payload["data"]["candidates"]] == ["xml", "pdf"]
+
+
+def test_locate_fulltext_locator_list(server: Any) -> None:
+    payload = _call(
+        server,
+        "locate_fulltext",
+        {"identifier": "doi:10.1000/fake1", "format": "pdf", "locator": "fake"},
+    )
+    assert payload["data"]["candidates"][0]["url"] == "https://example.org/paper.pdf"
+
+
+def test_locate_fulltext_invalid_format(server: Any) -> None:
+    payload = _call(
+        server, "locate_fulltext", {"identifier": "doi:10.1000/fake1", "format": "docx"}
+    )
+    assert payload["error"]["code"] == "USAGE"
 
 
 def test_fetch_fulltext_pdf(server: Any, tmp_path: Path) -> None:
@@ -284,6 +325,12 @@ def test_stdio_roundtrip() -> None:
             return {t.name for t in tools.tools}, _payload(result)
 
     names, payload = asyncio.run(asyncio.wait_for(roundtrip(), timeout=90))
-    assert names == {"search_papers", "get_paper", "fetch_fulltext", "list_sources"}
+    assert names == {
+        "search_papers",
+        "get_paper",
+        "locate_fulltext",
+        "fetch_fulltext",
+        "list_sources",
+    }
     assert payload["schema_version"] == render.SCHEMA_VERSION
     assert "pubmed" in {entry["name"] for entry in payload["data"]["searcher"]}

@@ -96,7 +96,7 @@
 **目标**：AI 助理两条通道（JSON CLI / MCP）都达到可日常使用的稳定度。
 
 - [x] extra `mcp`：官方 SDK（mcp>=2.0，MCPServer），`paper-tools mcp`（stdio）；缺 extra 报 USAGE 并给安装指引
-- [x] 四个工具：search_papers / get_paper / fetch_fulltext / list_sources，入参 schema 与 CLI 同源，返回同一 envelope
+- [x] 五个工具：search_papers / get_paper / locate_fulltext / fetch_fulltext / list_sources，入参 schema 与 CLI 同源，返回同一 envelope
 - [x] `schema_version 1.0` 冻结；schema 快照测试进 CI 强制门禁（tests/snapshots/schema_v1.json + CHANGELOG）
 - [x] `examples/agent-usage.md`：shell 调用范式、退出码处理、get NDJSON 批量、错误恢复建议（示例逐条实测可执行）
 - [x] MCP 客户端挂载验证：官方 SDK ClientSession 真实 stdio 子进程往返 + live search→get→fetch 全流程；Qoder/Claude 挂载配置见 agent-usage

@@ -6,6 +6,11 @@ JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.2**）：任何�
 
 ## [未发布]
 
+### 新增
+
+- **MCP 暴露 `locate_fulltext`**：按文献标识符返回排序后的 OA 全文候选，支持
+  `format` 过滤与 `locator` 限定，不下载文件；参数和 envelope 与 CLI `locate` 一致。
+
 ### 修复
 
 - **缓存安全与完整性**：HTTP 缓存键改为请求方法、URL、参数、请求体和请求头的

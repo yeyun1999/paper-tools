@@ -39,7 +39,7 @@ def _item_to_paper(item: dict[str, Any]) -> Paper:
         identifiers["doi"] = normalize_doi(item["DOI"])
     titles = item.get("title") or []
     authors = [
-        Author(name=f"{a.get('given', '')} {a.get('family', '')}".strip())
+        Author(name=f"{a.get('given', '')} {a.get('family', '')}".strip(),orcid=a.get('ORCID',''))
         for a in item.get("author", [])
         if a.get("family") or a.get("given")
     ]
