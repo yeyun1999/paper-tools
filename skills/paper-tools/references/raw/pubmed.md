@@ -55,27 +55,21 @@ CRISPR NOT review
 |---|---|---|
 | `[ti]` | Title | `CRISPR[ti]` |
 | `[tiab]` | Title/Abstract | `"base editing"[tiab]` |
-| `[tw]` | Text Word | `vaccin*[tw]` |
+| `[tw]` | 文本词：标题、摘要、MeSH 词、副主题词、出版类型、物质名、团体作者、作者关键词等 | `vaccin*[tw]` |
 | `[au]` | Author | `Smith JA[au]` |
 | `[1au]` | First Author | `Smith JA[1au]` |
 | `[lastau]` | Last Author | `Smith JA[lastau]` |
-| `[auid]` | Author Identifier / ORCID | `0000-0000-0000-0001[auid]` |
 | `[ad]` | Affiliation | `Harvard[ad]` |
 | `[ta]` | Journal | `Nature[ta]` |
 | `[dp]` | Publication Date | `2023:2026[dp]` |
-| `[edat]` | Entry Date | `2026/01/01:2026/12/31[edat]` |
-| `[crdt]` | Create Date | `2025[crdt]` |
 | `[pt]` | Publication Type | `review[pt]` |
 | `[mh]` | MeSH Terms | `CRISPR-Cas Systems[mh]` |
 | `[majr]` | MeSH Major Topic | `Neoplasms[majr]` |
 | `[sh]` | MeSH Subheading | `genetics[sh]` |
-| `[la]` | Language | `english[la]` |
 | `[sb]` | Subset / Filter | `free full text[sb]` |
 | `[pmid]` | PMID | `38308006[pmid]` |
 | `[pmcid]` | PMCID | `PMC13434336[pmcid]` |
 | `[aid]` | Article Identifier / DOI | `10.1038/s41586-020-2649-2[aid]` |
-| `[gr]` | Grant Number / Agency | `NIH[gr]` |
-| `[pg]` | Pagination | `715-728[pg]` |
 
 同一字段的多个词必须分别加标签：
 
