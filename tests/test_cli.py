@@ -465,10 +465,14 @@ def test_help_lists_available_plugins_and_descriptions() -> None:
     assert "Batch output" not in fetched.stdout
     expected_default = ", ".join(load_config().fetch.locators) or "all"
     assert f"'all' forces every registered locator (default: {expected_default})" in fetched.stdout
-    for command in ("locate", "download", "extract"):
+    for command, description in (
+        ("locate", "Filter candidates"),
+        ("download", "Output filename"),
+        ("extract", "Output text filename"),
+    ):
         help_result = runner.invoke(app, [command, "--help"])
         assert help_result.exit_code == 0
-        assert "--output" in help_result.stdout or command == "locate"
+        assert description in help_result.stdout
         assert "[default:" not in help_result.stdout
     locate_help = runner.invoke(app, ["locate", "--help"]).stdout
     for name in ("europepmc", "openalex", "pmc_oa", "unpaywall"):
