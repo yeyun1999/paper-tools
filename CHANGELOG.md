@@ -8,6 +8,14 @@ JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.2**）：任何�
 
 ### 修复
 
+- **缓存安全与完整性**：HTTP 缓存键改为请求方法、URL、参数、请求体和请求头的
+  SHA-256 摘要，API key 不再明文落盘，不同认证上下文不再串键；缓存命中保留原状态码、
+  响应头和请求 URL。PDF/XML/文本产物改用临时文件原子替换，读取时校验 SHA-256，损坏文件
+  自动删除并回源。
+- **强制插件语义**：`fetch --downloader` 与 text 场景下的 `--extractor` 不再被缓存命中
+  绕过，强制插件名称和兼容性始终校验。
+- **补全缓存隔离**：`search --enrich` 不再把搜索源 Paper 写入元数据缓存；缓存值仅由
+  MetadataProvider 返回数据构建，避免搜索字段污染后续 `get`。
 - **PMC 全文获取迁移至 AWS Article Datasets**：PMC OA Web Service 停用后，`pmc_oa`
   不再调用返回 404 的旧接口；改用 PMC ID Converter 选择当前版本，并从官方
   `pmc-oa-opendata` 元数据获取 PDF/XML 直链。修复 PMC8851247 等文章的 PDF
@@ -38,6 +46,9 @@ JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.2**）：任何�
 
 ### 变更（CLI）
 
+- **缓存管理扩展**：`cache clear --all` 同时删除 KV 与 PDF/XML/文本产物；新增
+  `cache gc` 清理 mapping 过期后遗留的孤立产物；`cache stats` 新增 KV/产物体积与产物
+  文件数统计。`cache clear` 默认仍保留产物文件。
 - **内置下载器合并为 `http_direct`**：移除 `europepmc` / `pmc_oa` Downloader 实现与
   entry point，Europe PMC XML、PMC S3 PDF/XML 和其他 HTTP(S) 直链统一由 `http_direct`
   下载；Locator、PMC 限流和候选来源溯源保持不变，下载结果溯源统一为 `http_direct`。

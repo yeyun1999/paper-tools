@@ -12,7 +12,7 @@ import pytest
 from typer.testing import CliRunner
 
 from paper_tools import __version__
-from paper_tools.cli import context, render
+from paper_tools.cli import cache_cmd, context, render
 from paper_tools.cli.app import _force_utf8_streams, app
 from paper_tools.core.config import load_config
 from paper_tools.core.services import Services
@@ -372,6 +372,40 @@ def test_sources_lists_all_roles(cli: CliRunner) -> None:
     assert data["extractor"][0]["name"] == "fake_ext"
     removed = cli.invoke(app, ["providers", "--json"])
     assert removed.exit_code == 2
+
+
+def test_cache_clear_all_and_stats(
+    cli: CliRunner, services: Services, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cache_cmd, "Cache", lambda: services.cache)
+    output = tmp_path / "paper.pdf"
+    fetched = cli.invoke(app, ["fetch", "doi:10.1000/fake1", "--output", str(output), "--json"])
+    assert fetched.exit_code == 0
+
+    stats = cli.invoke(app, ["cache", "stats", "--json"])
+    assert stats.exit_code == 0
+    data = json.loads(stats.stdout)["data"]
+    assert data["artifact_files"] == 1
+    assert data["artifact_size_bytes"] > 0
+
+    cleared = cli.invoke(app, ["cache", "clear", "--all", "--json"])
+    assert cleared.exit_code == 0
+    assert json.loads(cleared.stdout)["data"] == {
+        "cleared": data["entries"],
+        "artifacts_cleared": True,
+    }
+    assert not (services.cache.root / "papers").exists()
+
+
+def test_cache_gc_removes_orphans(
+    cli: CliRunner, services: Services, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cache_cmd, "Cache", lambda: services.cache)
+    orphan, _ = services.cache.store_file(b"orphan", "txt")
+    result = cli.invoke(app, ["cache", "gc", "--json"])
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["data"] == {"removed": 1}
+    assert not orphan.exists()
 
 
 def test_schema_command(cli: CliRunner) -> None:

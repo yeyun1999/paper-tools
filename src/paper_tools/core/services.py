@@ -54,6 +54,7 @@ from paper_tools.core.query import Query
 logger = logging.getLogger(__name__)
 
 _METADATA_TTL = 7 * 86400
+_METADATA_CACHE_VERSION = 2
 _FILEMAP_TTL = 30 * 86400
 _TRUSTED_LOCATORS = {"europepmc", "pmc_oa"}
 _PREFERRED_EXTRACTORS = {"xml": "jats", "pdf": "pypdf"}
@@ -246,7 +247,7 @@ class SearchService:
         if enrich:
             items = []
             for item in page.items:
-                enriched, item_warnings = self._metadata.enrich(item)
+                enriched, item_warnings = self._metadata.enrich(item, cache_result=False)
                 items.append(enriched)
                 warnings.extend(item_warnings)
             page = page.model_copy(update={"items": items})
@@ -373,7 +374,9 @@ class MetadataService:
         self._config = config
         self._cache = cache
 
-    def enrich(self, paper: Paper, *, only_source: str | None = None) -> tuple[Paper, list[str]]:
+    def enrich(
+        self, paper: Paper, *, only_source: str | None = None, cache_result: bool = True
+    ) -> tuple[Paper, list[str]]:
         """Fill missing paper metadata using compatible providers.
 
         Providers run in configured priority order and stop once the title and
@@ -383,6 +386,7 @@ class MetadataService:
         Args:
             paper: Paper whose identifiers seed the enrichment chain.
             only_source: Restrict the chain to one metadata provider.
+            cache_result: Whether a newly enriched result may be written to the cache.
 
         Returns:
             The enriched paper and non-fatal warning messages.
@@ -420,7 +424,7 @@ class MetadataService:
             )
 
         cache_key = (
-            f"meta:v{SCHEMA_VERSION}:"
+            f"meta:v{SCHEMA_VERSION}:{_METADATA_CACHE_VERSION}:"
             + json.dumps(paper.identifiers, sort_keys=True)
             + f":{only_source}"
         )
@@ -430,6 +434,7 @@ class MetadataService:
             return merged, warnings + merge_warnings
 
         current = paper
+        cache_value = Paper(identifiers=dict(paper.identifiers))
         failures = 0
         for provider in providers:
             if is_complete(current):
@@ -443,13 +448,15 @@ class MetadataService:
                 failures += 1
                 continue
             current, merge_warnings = merge_papers(current, incoming, source=provider.meta.name)
+            cache_value, _ = merge_papers(cache_value, incoming, source=provider.meta.name)
             warnings.extend(merge_warnings)
 
         if failures == len(providers):
             raise UpstreamError("All metadata sources failed", identifiers=paper.identifiers)
         if not current.title:
             raise NotFoundError("No metadata found", identifiers=paper.identifiers)
-        self._cache.set(cache_key, current.model_dump(mode="json"), ttl=_METADATA_TTL)
+        if cache_result and cache_value.title:
+            self._cache.set(cache_key, cache_value.model_dump(mode="json"), ttl=_METADATA_TTL)
         return current, warnings
 
 
@@ -573,10 +580,11 @@ class FetchService:
             )
 
         attempts: list[str] = []
+        use_cache = downloader is None and not (artifact_format == "text" and extractor is not None)
         for candidate in self._rank(candidates, artifact_format):
             if not self._format_compatible(candidate, artifact_format):
                 continue
-            artifact = self._cached_artifact(candidate, artifact_format)
+            artifact = self._cached_artifact(candidate, artifact_format) if use_cache else None
             if artifact is None:
                 artifact = self._download(candidate, downloader, attempts)
             if artifact is None:

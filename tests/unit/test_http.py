@@ -198,3 +198,64 @@ def test_post_form_cache_hit(tmp_path: Path) -> None:
     client.post_json("https://api.example.org/form", data={"id": "123"}, cache_ttl=3600)
     client.post_json("https://api.example.org/form", data={"id": "123"}, cache_ttl=3600)
     assert route.call_count == 1
+
+
+@respx.mock
+def test_response_cache_key_includes_auth_headers(tmp_path: Path) -> None:
+    route = respx.get("https://api.example.org/x").mock(
+        side_effect=[
+            httpx.Response(200, json={"account": "a"}),
+            httpx.Response(200, json={"account": "b"}),
+        ]
+    )
+    client, _ = make_client(tmp_path)
+    first = client.get_json(
+        "https://api.example.org/x", headers={"Authorization": "Bearer a"}, cache_ttl=3600
+    )
+    second = client.get_json(
+        "https://api.example.org/x", headers={"Authorization": "Bearer b"}, cache_ttl=3600
+    )
+    cached = client.get_json(
+        "https://api.example.org/x", headers={"Authorization": "Bearer a"}, cache_ttl=3600
+    )
+    assert first == cached == {"account": "a"}
+    assert second == {"account": "b"}
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_response_cache_key_does_not_store_secrets(tmp_path: Path) -> None:
+    cache = Cache(root=tmp_path / "cache")
+    client = HttpClient(cache=cache, sleep=lambda _s: None)
+    respx.get("https://api.example.org/x").mock(return_value=httpx.Response(200, json={"ok": 1}))
+    client.get_json(
+        "https://api.example.org/x",
+        params={"api_key": "super-secret-key"},
+        headers={"x-api-key": "header-secret-key"},
+        cache_ttl=3600,
+    )
+    keys = list(cache._dc.iterkeys())  # type: ignore[union-attr]
+    assert keys
+    assert all("super-secret-key" not in key for key in keys)
+    assert all("header-secret-key" not in key for key in keys)
+    assert all("api.example.org" not in key for key in keys)
+
+
+@respx.mock
+def test_cached_response_preserves_status_headers_and_request(tmp_path: Path) -> None:
+    route = respx.get("https://api.example.org/x", params={"a": "1"}).mock(
+        return_value=httpx.Response(
+            203,
+            headers={"Content-Type": "application/json", "X-Test": "cached"},
+            json={"ok": 1},
+        )
+    )
+    client, _ = make_client(tmp_path)
+    client.get_json("https://api.example.org/x", params={"a": "1"}, cache_ttl=3600)
+    response = client.request("GET", "https://api.example.org/x", params={"a": "1"}, cache_ttl=3600)
+    assert route.call_count == 1
+    assert response.status_code == 203
+    assert response.headers["content-type"] == "application/json"
+    assert response.headers["x-test"] == "cached"
+    assert str(response.request.url) == "https://api.example.org/x?a=1"
+    assert response.extensions["from_cache"] is True

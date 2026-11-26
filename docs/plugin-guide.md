@@ -172,11 +172,11 @@ paper-tools config set plugins.mysource.server prod
 
 统一走 `ctx.http`（[core/http.py](../src/paper_tools/core/http.py)）：
 
-- `get_json(url, params=…, headers=…, cache_ttl=…)`：GET 响应缓存。
-  约定 TTL：检索 1h（3600）、元数据 7d（604800）。
+- `get_json(url, params=…, headers=…, cache_ttl=…)`：GET 响应缓存。缓存键包含请求头，
+  不同认证上下文不会串键；约定 TTL：检索 1h（3600）、元数据 7d（604800）。
 - `post_json(url, json_body=…, data=…, headers=…, cache_ttl=…)`：POST JSON 体或表单
-  （如批量查询 API）；默认不缓存，幂等查询 API 可传 `cache_ttl` 开启（缓存键含请求体哈希，
-  键序无关）；限流/重试与 GET 一致。
+  （如批量查询 API）；默认不缓存，幂等查询 API 可传 `cache_ttl` 开启。缓存键包含方法、
+  URL、参数、请求体和请求头的 SHA-256 摘要，JSON 键序无关，API key 等敏感值不会明文落盘。
 - 自动退避重试 429/5xx ×3（含 Retry-After）；耗尽抛 `UpstreamError`（details 含状态码）。
 - **新 API host 默认不限流**：插件应在 `__init__` 里
   `ctx.http.set_rate_limit("api.mysource.org", 1.0)` 声明上游限额；

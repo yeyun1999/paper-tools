@@ -402,7 +402,7 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 2. **去重排序**：按 URL+格式 去重；同键候选合并 `locator` 与 `downloaders` 有序并集，并优先保留已有 license。同一 PMC 版本可同时产出 XML 与 PDF 候选。排序键 = 格式匹配度 > 来源可信度（locator 列表中任一 europepmc/pmc_oa 视为可信，其次任一 unpaywall，最后其他）> license 明确度。
 3. **下载与校验**：内置候选的 `downloaders` 推荐列表统一为 `["http_direct"]`；第三方 Downloader 仍按推荐顺序接入。仅保留 `formats` 匹配且 `supports()` 为 True 的插件，失败后尝试列表中的下一个。显式 `--downloader` 仍作为强制覆盖。PDF 校验 `%PDF` 魔数与最小体积，XML 校验可解析且含 `<article>`；全部失败后降级下一候选。
 4. **提取（仅 --format text）**：产物按格式选 Extractor（XML→jats 优先；PDF→pypdf，可用 `--extractor` 强制指定）；输出 `.txt` 并记录 `extractor`/`extracted_from`。
-5. **落盘与缓存**：未指定 `--output` / `fetch.output` 时，在当前目录使用安全化文章标题作为文件名；重名时追加 DOI（其次 PMID/PMCID 等 ID）。显式输出保持固定文件名。未指定格式时按 `.pdf` / `.xml` / `.txt` 推断，无扩展名时补全（默认 PDF），格式与扩展名冲突返回 `USAGE`。同时写入文件缓存 `cache/papers/<sha256>.<ext>` + 映射 sidecar（sha256/ext/最终格式/extractor/extracted_from）。缓存存的是**最终产物**（text 请求存已提取文本），命中时跳过重复校验与重复提取，并恢复提取溯源；重复请求不重复下载。
+5. **落盘与缓存**：未指定 `--output` / `fetch.output` 时，在当前目录使用安全化文章标题作为文件名；重名时追加 DOI（其次 PMID/PMCID 等 ID）。显式输出保持固定文件名。未指定格式时按 `.pdf` / `.xml` / `.txt` 推断，无扩展名时补全（默认 PDF），格式与扩展名冲突返回 `USAGE`。同时写入文件缓存 `cache/papers/<sha256>.<ext>` + 映射 sidecar（sha256/ext/最终格式/extractor/extracted_from）。缓存存的是**最终产物**（text 请求存已提取文本），命中时跳过重复校验与重复提取，并恢复提取溯源；重复请求不重复下载。显式指定 `--downloader` 或 text 场景下的 `--extractor` 时绕过最终产物缓存，确保强制插件参数始终生效。
 6. **失败路径**：所有候选失败或 `oa_status=closed` → 结构化错误 `FULLTEXT_UNAVAILABLE`，附 `publisher_url`，退出码 4。
 
 ## 9. CLI 契约
@@ -419,7 +419,7 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 | `fetch ID` | 一键获取单篇文献全文 | `--format pdf\|xml\|text`（可选，省略时按输出扩展名推断）、`--output FILE`（可选，默认安全化文章标题，重名追加 ID）、`--locator`（可重复指定或逗号分隔，限定定位器；`all` 强制全部；默认取 `fetch.locators` 配置，空则全部）、`--downloader`（强制指定）、`--extractor`（text 时强制指定） |
 | `sources` | 列出全部已注册插件（按五类角色分组）与关键属性 | |
 | `config get\|set\|list\|path` | 配置管理 | 点分键，如 `plugins.unpaywall.email` |
-| `cache clear\|stats` | 缓存管理 | |
+| `cache clear [--all]\|gc\|stats` | 缓存管理 | `clear` 默认保留产物，`--all` 同时删除 PDF/XML/文本；`gc` 清理孤立产物；`stats` 分别统计 KV 与产物体积 |
 | `schema [COMMAND]` | 导出 JSON Schema（AI 用） | |
 | `mcp` | 启动 MCP 服务器（extra `mcp`，stdio） | |
 
@@ -554,12 +554,12 @@ enrich_priority = ["pubmed", "europepmc", "crossref", "openalex", "semantic_scho
 | api.unpaywall.org | 5 req/s | 每 email 每日 10 万次上限 |
 
 - 重试：429/5xx 指数退避 + 抖动，尊重 `Retry-After`，最多 3 次；仍失败抛 `UpstreamError`（退出码 3）。
-- 方法：`get_json` / `get_bytes`（GET，可缓存）；`post_json(json_body=… | data=…)`（POST JSON 或表单，`cache_ttl` 显式开启缓存，键含请求体 sha256，不同 body 不串键）；底层 `request(method, …)` 支持任意方法，限流/重试/错误映射统一生效。
+- 方法：`get_json` / `get_bytes`（GET，可缓存）；`post_json(json_body=… | data=…)`（POST JSON 或表单，`cache_ttl` 显式开启缓存，键包含请求体、参数与请求头，敏感值仅以整体 SHA-256 摘要写入磁盘）；底层 `request(method, …)` 支持任意方法，限流/重试/错误映射统一生效。
 
 ### 12.2 缓存（core/cache.py）
 
-- diskcache 存元数据与响应：搜索结果 TTL 1h，Paper 元数据/补全结果 7d，OA 定位 24h；`--no-cache` 绕过。
-- PDF/XML/提取文本按 sha256 落盘，重复 fetch 同一文献直接命中；`cache stats` 展示体积与条目数。
+- diskcache 存元数据与响应：搜索结果 TTL 1h，Paper 元数据/补全结果 7d，OA 定位 24h；`--no-cache` 绕过。HTTP 缓存键为请求方法、URL、参数、请求体和请求头的 SHA-256 摘要，避免 API key 等敏感值明文落盘，并隔离不同认证上下文。
+- PDF/XML/提取文本按 sha256 落盘，写入采用同目录临时文件原子替换，读取时校验 SHA-256；损坏文件会被删除并回源。`cache stats` 分别展示 KV 与产物体积，`cache clear --all` 删除全部缓存，`cache gc` 清理 mapping 过期后遗留的孤立产物。
 
 ### 12.3 日志
 

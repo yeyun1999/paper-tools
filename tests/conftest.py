@@ -165,8 +165,10 @@ class FakeExtractor:
 
     def __init__(self, ctx: PluginContext | None = None) -> None:
         self.ctx = ctx
+        self.calls = 0
 
     def extract(self, data: bytes, *, source_format: str) -> str:
+        self.calls += 1
         return f"EXTRACTED[{source_format}] " + data.decode("utf-8", errors="replace")[:80]
 
 

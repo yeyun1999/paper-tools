@@ -277,6 +277,86 @@ def test_fetch_text_cache_hit_keeps_provenance(services: Services, tmp_path: Pat
     assert second.path.read_text(encoding="utf-8") == first.path.read_text(encoding="utf-8")
 
 
+def test_search_enrich_does_not_populate_metadata_cache(services: Services) -> None:
+    services.search.search(Query(text="CRISPR"), enrich=True)
+    provider = services.registry.get("metadata", "fake")
+    calls_before = provider.calls
+    services.metadata.enrich(Paper(identifiers={"doi": "10.1000/fake1"}))
+    assert provider.calls == calls_before + 1
+
+
+def test_complete_caller_paper_is_not_cached_as_metadata(services: Services) -> None:
+    caller = Paper(
+        title="Search-supplied title",
+        abstract="Search-supplied abstract",
+        identifiers={"doi": "10.1000/fake1"},
+    )
+    services.metadata.enrich(caller)
+    provider = services.registry.get("metadata", "fake")
+    calls_before = provider.calls
+    paper, _ = services.metadata.enrich(Paper(identifiers={"doi": "10.1000/fake1"}))
+    assert provider.calls == calls_before + 1
+    assert paper.title == "CRISPR base editing review"
+
+
+def test_forced_downloader_is_validated_on_cache_hit(services: Services, tmp_path: Path) -> None:
+    services.fetch.fetch("doi:10.1000/fake1", output=tmp_path / "first.pdf")
+    with pytest.raises(UsageError):
+        services.fetch.fetch(
+            "doi:10.1000/fake1",
+            output=tmp_path / "second.pdf",
+            downloader="nonexistent",
+        )
+
+
+def test_forced_extractor_is_validated_on_cache_hit(services: Services, tmp_path: Path) -> None:
+    services.fetch.fetch("doi:10.1000/fake1", fmt="text", output=tmp_path / "first.txt")
+    with pytest.raises(UsageError):
+        services.fetch.fetch(
+            "doi:10.1000/fake1",
+            fmt="text",
+            output=tmp_path / "second.txt",
+            extractor="nonexistent",
+        )
+
+
+def test_forced_downloader_bypasses_file_cache(services: Services, tmp_path: Path) -> None:
+    services.fetch.fetch("doi:10.1000/fake1", output=tmp_path / "first.pdf")
+    downloader = services.registry.get("downloader", "fake_dl")
+    calls_before = downloader.calls
+    result, _ = services.fetch.fetch(
+        "doi:10.1000/fake1", output=tmp_path / "second.pdf", downloader="fake_dl"
+    )
+    assert downloader.calls == calls_before + 1
+    assert result.downloader == "fake_dl"
+
+
+def test_forced_extractor_bypasses_text_cache(services: Services, tmp_path: Path) -> None:
+    services.fetch.fetch("doi:10.1000/fake1", fmt="text", output=tmp_path / "first.txt")
+    extractor = services.registry.get("extractor", "fake_ext")
+    calls_before = extractor.calls
+    result, _ = services.fetch.fetch(
+        "doi:10.1000/fake1",
+        fmt="text",
+        output=tmp_path / "second.txt",
+        extractor="fake_ext",
+    )
+    assert extractor.calls == calls_before + 1
+    assert result.downloader == "fake_dl"
+    assert result.extractor == "fake_ext"
+
+
+def test_corrupt_cached_artifact_falls_back_to_download(services: Services, tmp_path: Path) -> None:
+    first, _ = services.fetch.fetch("doi:10.1000/fake1", output=tmp_path / "first.pdf")
+    cached_path = services.cache.file_path(first.sha256, "pdf")
+    cached_path.write_bytes(b"corrupt")
+    downloader = services.registry.get("downloader", "fake_dl")
+    calls_before = downloader.calls
+    second, _ = services.fetch.fetch("doi:10.1000/fake1", output=tmp_path / "second.pdf")
+    assert downloader.calls == calls_before + 1
+    assert second.path.read_bytes().startswith(b"%PDF")
+
+
 def test_fetch_locator_config_error_becomes_warning(services: Services, tmp_path: Path) -> None:
     class BrokenConfigLocator:
         meta = PluginMeta(name="broken_cfg", version="0.1.0")

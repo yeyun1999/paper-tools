@@ -9,7 +9,7 @@ import random
 import time
 from collections.abc import Callable
 from typing import Any
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlparse
 
 import httpx
 
@@ -108,19 +108,35 @@ class HttpClient:
         cache_ttl: float | None = None,
     ) -> httpx.Response:
         host = urlparse(url).hostname or ""
-        body_sig = ""
-        if json_body is not None:
-            body_sig = hashlib.sha256(json.dumps(json_body, sort_keys=True).encode()).hexdigest()
-        elif data is not None:
-            body_sig = hashlib.sha256(urlencode(sorted(data.items())).encode()).hexdigest()
-        cache_key = f"http:{method}:{url}:{urlencode(sorted((params or {}).items()))}"
-        if body_sig:
-            cache_key += f":{body_sig}"
-        cacheable = method in {"GET", "POST"} and cache_ttl is not None and self._cache is not None
+        request_headers = {**dict(self._client.headers), **(headers or {})}
+        cache_key = ""
+        cacheable = (
+            method.upper() in {"GET", "POST"} and cache_ttl is not None and self._cache is not None
+        )
         if cacheable and self._cache is not None:
+            key_payload = {
+                "method": method.upper(),
+                "url": url,
+                "params": params or {},
+                "json": json_body,
+                "data": data,
+                "headers": {key.lower(): value for key, value in request_headers.items()},
+            }
+            serialized = json.dumps(
+                key_payload, sort_keys=True, separators=(",", ":"), default=str
+            ).encode()
+            cache_key = f"http:v2:{hashlib.sha256(serialized).hexdigest()}"
             cached = self._cache.get(cache_key)
-            if cached is not None:
-                return httpx.Response(200, content=cached, request=httpx.Request(method, url))
+            if isinstance(cached, dict):
+                return httpx.Response(
+                    status_code=cached["status_code"],
+                    headers=cached["headers"],
+                    content=cached["content"],
+                    request=httpx.Request(
+                        method.upper(), url, params=params, headers=request_headers
+                    ),
+                    extensions={"from_cache": True},
+                )
 
         last_exc: Exception | None = None
         last_status: int | None = None
@@ -149,7 +165,20 @@ class HttpClient:
                         status=response.status_code,
                     )
                 if cacheable and self._cache is not None:
-                    self._cache.set(cache_key, response.content, ttl=cache_ttl)
+                    self._cache.set(
+                        cache_key,
+                        {
+                            "status_code": response.status_code,
+                            "headers": [
+                                (name, value)
+                                for name, value in response.headers.multi_items()
+                                if name.lower()
+                                not in {"content-encoding", "content-length", "transfer-encoding"}
+                            ],
+                            "content": response.content,
+                        },
+                        ttl=cache_ttl,
+                    )
                 return response
             if attempt < self._max_retries - 1:
                 delay = self._backoff(attempt, response)
