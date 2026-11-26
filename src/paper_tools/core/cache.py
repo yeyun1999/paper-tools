@@ -1,4 +1,4 @@
-"""Caching: diskcache KV for responses/metadata + sha256-addressed file store."""
+"""Caching: diskcache KV for HTTP responses/file mappings + sha256 file store."""
 
 from __future__ import annotations
 

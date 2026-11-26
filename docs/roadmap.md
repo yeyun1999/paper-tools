@@ -59,7 +59,7 @@
 - [x] 两源查询翻译表（text/author/journal/year/oa）+ 单元测试
 - [x] CLI `search`（--limit/--cursor/--fields/--oa-only/--raw/--enrich）与 `get`（补全链）
 - [x] respx 回放测试；`live` 标记真实冒烟脚本
-- [x] 搜索结果缓存（TTL 1h）与补全结果缓存（7d）接入
+- [x] 搜索结果 HTTP 缓存（TTL 1h）与 metadata provider HTTP 缓存（通常 7d）接入
 
 **验收**：`search "CRISPR base editing" --source pubmed --json` 返回含 DOI/PMID 的真实结果；`--enrich` 后摘要缺失率显著下降且 sources 记录贡献插件；`get pmid:...` 与 `get doi:...` 归一化一致；断网/429 场景退出码 3 且错误结构化；回放测试离线全绿。
 
@@ -149,7 +149,7 @@ uv build && uv publish       # 发布
 |---|---|---|
 | 上游 API 变更/限流收紧 | 检索/下载失败 | 回放测试隔离日常开发；退避重试；api_key/mailto 配置化；live 冒烟定期跑 |
 | S2 无 key 共享限额低 | 批量场景易 429 | 默认 1 req/s + 缓存强化；文档引导申请 key |
-| 补全链放大请求量 | --enrich 批量时触发限流 | 按 host 限流统一约束；补全缓存 7d；优先级链提前终止 |
+| 补全链放大请求量 | --enrich 批量时触发限流 | 按 host 限流统一约束；provider HTTP 缓存 7d；优先级链提前终止 |
 | PDF 文本提取质量差 | AI 阅读体验 | 优先 XML；pypdf 结果标注 extractor；GROBID 以 Extractor 插件进 backlog |
 | 插件接口演进破坏第三方 | 生态受损 | 五角色接口保持最小；语义化版本；变更走 CHANGELOG |
 | Windows 路径/编码问题 | 本地开发受阻 | pathlib 全程、显式 UTF-8、CI 加 windows-latest 冒烟 |

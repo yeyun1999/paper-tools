@@ -380,8 +380,8 @@ bioRxiv/medRxiv、arXiv q-bio、GROBID 等进 backlog，作为第三方插件机
 
 1. **路由**：按 Paper 已有标识符与各 MetadataProvider 的 `id_kinds` 匹配，按优先级排序（pubmed/europepmc > crossref > openalex > semantic_scholar > unpaywall）。
 2. **逐个 enrich**：fill-missing 合并——空字段填入、identifiers 并集、`sources` 追加贡献插件；已有字段冲突时不覆盖，记入 `warnings`。`ConfigError`（如 Unpaywall 缺 email）不降级为告警，直接传播为退出码 5。
-3. **终止条件**：`get` 场景取到 title + 摘要即可提前停止（可配置）；`search --enrich` 场景对每条结果跑链，命中缓存则跳过网络。
-4. **缓存**：补全结果按标识符缓存 7d，键含 `schema_version`（契约升级自动失效旧缓存）；`--no-cache` 绕过。
+3. **终止条件**：标题、摘要和本次请求的输出字段均可用时提前停止；`all` 要求检查全部 Paper 字段。`search --enrich` 对每条结果独立跑链。
+4. **缓存**：补全链不维护汇总缓存；各 MetadataProvider 的上游响应由 HttpClient 缓存，内置源通常为 7d，Unpaywall 为 1d；`--no-cache` 绕过。
 
 ### 8.3 FetchService（定位 → 下载 → 提取）
 
@@ -564,7 +564,7 @@ get_fields = ["title", "identifiers.doi", "year", "cited_by_count", "journal", "
 
 ### 12.2 缓存（core/cache.py）
 
-- diskcache 存元数据与响应：搜索结果 TTL 1h，Paper 元数据/补全结果 7d，OA 定位 24h；`--no-cache` 绕过。HTTP 缓存键为请求方法、URL、参数、请求体和请求头的 SHA-256 摘要，避免 API key 等敏感值明文落盘，并隔离不同认证上下文。
+- diskcache 存 HTTP 响应与文件映射：搜索结果 TTL 1h，metadata provider 响应通常 7d，OA 定位通常 1d；`--no-cache` 绕过。补全链不再维护跨 provider 的 metadata 汇总缓存。HTTP 缓存键为请求方法、URL、参数、请求体和请求头的 SHA-256 摘要，避免 API key 等敏感值明文落盘，并隔离不同认证上下文。
 - PDF/XML/提取文本按 sha256 落盘，写入采用同目录临时文件原子替换，读取时校验 SHA-256；损坏文件会被删除并回源。`cache stats` 分别展示 KV 与产物体积，`cache clear --all` 删除全部缓存，`cache gc` 清理 mapping 过期后遗留的孤立产物。
 
 ### 12.3 日志

@@ -28,7 +28,6 @@ from paper_tools.core.errors import (
 )
 from paper_tools.core.fields import field_is_present
 from paper_tools.core.models import (
-    SCHEMA_VERSION,
     Artifact,
     ArtifactFormat,
     DownloadedFullText,
@@ -55,8 +54,6 @@ from paper_tools.core.query import Query
 
 logger = logging.getLogger(__name__)
 
-_METADATA_TTL = 7 * 86400
-_METADATA_CACHE_VERSION = 2
 _FILEMAP_TTL = 30 * 86400
 _TRUSTED_LOCATORS = {"europepmc", "pmc_oa"}
 _PREFERRED_EXTRACTORS = {"xml": "jats", "pdf": "pypdf"}
@@ -252,7 +249,7 @@ class SearchService:
             items = []
             for item in page.items:
                 enriched, item_warnings = self._metadata.enrich(
-                    item, cache_result=False, required_fields=required_fields
+                    item, required_fields=required_fields
                 )
                 items.append(enriched)
                 warnings.extend(item_warnings)
@@ -373,38 +370,34 @@ def _has_required_fields(paper: Paper, required_fields: Sequence[str]) -> bool:
 
 
 class MetadataService:
-    """Enrichment chain: route by id_kinds, fill-missing merge, cache results."""
+    """Enrichment chain: route by id_kinds and fill-missing merge."""
 
-    def __init__(self, registry: PluginRegistry, config: AppConfig, cache: Cache) -> None:
+    def __init__(self, registry: PluginRegistry, config: AppConfig) -> None:
         """Initialize the metadata enrichment service.
 
         Args:
             registry: Registry used to resolve metadata providers.
             config: Application configuration, including provider priority.
-            cache: Cache used to reuse enriched metadata.
         """
         self._registry = registry
         self._config = config
-        self._cache = cache
 
     def enrich(
         self,
         paper: Paper,
         *,
         only_source: str | None = None,
-        cache_result: bool = True,
         required_fields: Sequence[str] | None = None,
     ) -> tuple[Paper, list[str]]:
         """Fill missing paper metadata using compatible providers.
 
         Providers run in configured priority order and stop once the title,
-        abstract and requested output fields are present. Cached results are
-        merged without overwriting values already supplied by the caller.
+        abstract and requested output fields are present. Upstream HTTP
+        responses may still be served from the shared HTTP cache.
 
         Args:
             paper: Paper whose identifiers seed the enrichment chain.
             only_source: Restrict the chain to one metadata provider.
-            cache_result: Whether a newly enriched result may be written to the cache.
             required_fields: Output fields that providers should try to fill.
 
         Returns:
@@ -443,18 +436,7 @@ class MetadataService:
             )
 
         requested_fields = tuple(sorted(set(required_fields or [])))
-        cache_key = (
-            f"meta:v{SCHEMA_VERSION}:{_METADATA_CACHE_VERSION}:"
-            + json.dumps(paper.identifiers, sort_keys=True)
-            + f":{only_source}:{json.dumps(requested_fields)}"
-        )
-        cached = self._cache.get(cache_key)
-        if cached is not None:
-            merged, merge_warnings = merge_papers(paper, Paper.model_validate(cached), source="")
-            return merged, warnings + merge_warnings
-
         current = paper
-        cache_value = Paper(identifiers=dict(paper.identifiers))
         failures = 0
         for provider in providers:
             if _has_required_fields(current, requested_fields):
@@ -468,15 +450,12 @@ class MetadataService:
                 failures += 1
                 continue
             current, merge_warnings = merge_papers(current, incoming, source=provider.meta.name)
-            cache_value, _ = merge_papers(cache_value, incoming, source=provider.meta.name)
             warnings.extend(merge_warnings)
 
         if failures == len(providers):
             raise UpstreamError("All metadata sources failed", identifiers=paper.identifiers)
         if not current.title:
             raise NotFoundError("No metadata found", identifiers=paper.identifiers)
-        if cache_result and cache_value.title:
-            self._cache.set(cache_key, cache_value.model_dump(mode="json"), ttl=_METADATA_TTL)
         return current, warnings
 
 
@@ -1252,6 +1231,6 @@ class Services:
 
     def __post_init__(self) -> None:
         """Construct metadata, search, and fetch services from shared dependencies."""
-        self.metadata = MetadataService(self.registry, self.config, self.cache)
+        self.metadata = MetadataService(self.registry, self.config)
         self.search = SearchService(self.registry, self.config, self.metadata)
         self.fetch = FetchService(self.registry, self.config, self.cache, self.metadata)

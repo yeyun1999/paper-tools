@@ -16,7 +16,7 @@ paper-tools <command> --help
 | `--json` | stdout 输出 JSON；日志和警告走 stderr |
 | `--quiet` | 抑制非必要人类可读输出 |
 | `--verbose` | DEBUG 日志输出到 stderr |
-| `--no-cache` | 绕过响应、元数据和文件映射缓存 |
+| `--no-cache` | 绕过 HTTP 响应和文件映射缓存 |
 | `--timeout SECONDS` | 覆盖 HTTP 超时 |
 | `--config PATH` | 使用指定 TOML 配置 |
 | `--version` | 显示版本 |
@@ -33,7 +33,7 @@ paper-tools <command> --help
 | `fetch ID` | 一键定位 → 下载 → 可选提取 | `--format`、`--output`、`--locator`、`--downloader`、`--extractor` |
 | `sources` | 列出五类插件及加载警告 | `--json` |
 | `config get/set/list/path` | 管理配置 | 点分键；`set` 值为 TOML literal 或字符串 |
-| `cache clear/stats` | 清理响应/元数据缓存或查看统计 | `clear` 保留产物文件 |
+| `cache clear/stats` | 清理 HTTP 等 KV 缓存或查看统计 | `clear` 保留产物文件 |
 | `schema [COMMAND]` | 导出 JSON Schema | 支持 `search/get/locate/download/extract/fetch` |
 | `mcp` | 启动 stdio MCP 服务器 | 需要 `mcp` extra |
 

@@ -67,16 +67,16 @@ def test_enrich_no_provider_for_kind(services: Services) -> None:
         services.metadata.enrich(stub)
 
 
-def test_enrich_cache(services: Services) -> None:
+def test_enrich_repeats_provider_chain_without_aggregate_cache(services: Services) -> None:
     stub = Paper(identifiers={"doi": "10.1000/fake1"})
     services.metadata.enrich(stub)
     provider = services.registry.get("metadata", "fake")
     calls_before = provider.calls
     services.metadata.enrich(stub)
-    assert provider.calls == calls_before  # served from cache
+    assert provider.calls == calls_before + 1
 
 
-def test_enrich_continues_for_requested_fields_and_isolates_cache(services: Services) -> None:
+def test_enrich_continues_for_requested_nested_and_all_fields(services: Services) -> None:
     class CitationMetadata:
         meta = PluginMeta(name="zzz_citations", version="0.1.0")
         id_kinds = frozenset({"doi"})
@@ -97,13 +97,13 @@ def test_enrich_continues_for_requested_fields_and_isolates_cache(services: Serv
     assert paper.cited_by_count == 7
     assert provider.calls == 1
     services.metadata.enrich(stub, required_fields=["cited_by_count"])
-    assert provider.calls == 1
+    assert provider.calls == 2
     paper, _ = services.metadata.enrich(stub, required_fields=["identifiers.doi", "cited_by_count"])
     assert paper.identifiers["doi"] == "10.1000/fake1"
     assert paper.cited_by_count == 7
-    assert provider.calls == 2
-    services.metadata.enrich(stub, required_fields=all_field_names())
     assert provider.calls == 3
+    services.metadata.enrich(stub, required_fields=all_field_names())
+    assert provider.calls == 4
 
 
 def test_fetch_pdf(services: Services, tmp_path: Path) -> None:
@@ -308,15 +308,7 @@ def test_fetch_text_cache_hit_keeps_provenance(services: Services, tmp_path: Pat
     assert second.path.read_text(encoding="utf-8") == first.path.read_text(encoding="utf-8")
 
 
-def test_search_enrich_does_not_populate_metadata_cache(services: Services) -> None:
-    services.search.search(Query(text="CRISPR"), enrich=True)
-    provider = services.registry.get("metadata", "fake")
-    calls_before = provider.calls
-    services.metadata.enrich(Paper(identifiers={"doi": "10.1000/fake1"}))
-    assert provider.calls == calls_before + 1
-
-
-def test_complete_caller_paper_is_not_cached_as_metadata(services: Services) -> None:
+def test_complete_caller_paper_skips_providers(services: Services) -> None:
     caller = Paper(
         title="Search-supplied title",
         abstract="Search-supplied abstract",
@@ -324,10 +316,7 @@ def test_complete_caller_paper_is_not_cached_as_metadata(services: Services) -> 
     )
     services.metadata.enrich(caller)
     provider = services.registry.get("metadata", "fake")
-    calls_before = provider.calls
-    paper, _ = services.metadata.enrich(Paper(identifiers={"doi": "10.1000/fake1"}))
-    assert provider.calls == calls_before + 1
-    assert paper.title == "CRISPR base editing review"
+    assert provider.calls == 0
 
 
 def test_forced_downloader_is_validated_on_cache_hit(services: Services, tmp_path: Path) -> None:

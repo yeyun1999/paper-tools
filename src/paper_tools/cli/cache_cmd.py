@@ -20,7 +20,7 @@ def clear(
         typer.Option("--all", help="Also remove cached PDF, XML, and text artifacts."),
     ] = False,
 ) -> None:
-    """Clear cached responses and metadata (artifact files are kept by default)."""
+    """Clear cached HTTP responses and file mappings (artifact files are kept by default)."""
     opts = ctx.obj
     with render.error_guard(opts, "cache clear"):
         count = Cache().clear(include_artifacts=all_artifacts)

@@ -74,7 +74,8 @@ CLI 与 MCP 使用同一套配置：
 `{"identifiers":{"doi":"..."}}`，`authors[].name` 返回 `{"authors":[{"name":"..."}]}`。
 数组投影保留元素位置，缺失叶字段输出空对象；不再把 `doi` 等标识符提升到顶层。
 字段投影不改变 `SearchPage` 的分页字段，也不会让 `search` 自动启用补全；`get` 与
-启用补全的 `search` 会按所选字段继续补全，缓存键包含字段路径集合。
+启用补全的 `search` 会按所选字段继续补全；补全链不维护汇总缓存，上游响应由各 provider
+的 HTTP 缓存复用。
 
 ## JSON 与 NDJSON
 

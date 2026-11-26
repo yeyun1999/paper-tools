@@ -29,8 +29,6 @@ JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.3**）：任何�
   自动删除并回源。
 - **强制插件语义**：`fetch --downloader` 与 text 场景下的 `--extractor` 不再被缓存命中
   绕过，强制插件名称和兼容性始终校验。
-- **补全缓存隔离**：`search --enrich` 不再把搜索源 Paper 写入元数据缓存；缓存值仅由
-  MetadataProvider 返回数据构建，避免搜索字段污染后续 `get`。
 - **PMC 全文获取迁移至 AWS Article Datasets**：PMC OA Web Service 停用后，`pmc_oa`
   不再调用返回 404 的旧接口；改用 PMC ID Converter 选择当前版本，并从官方
   `pmc-oa-opendata` 元数据获取 PDF/XML 直链。修复 PMC8851247 等文章的 PDF
@@ -55,7 +53,7 @@ JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.3**）：任何�
 
 - **Paper 扩展文献计量字段并引入默认输出投影**：完整 Paper 新增六个文献计量/引用关系
   字段；`search` / `get` 在 CLI 与 MCP 默认只返回配置指定的字段。需要完整模型时传
-  `--fields all` 或 MCP `fields="all"`；schema 快照与补全缓存随契约版本更新。
+  `--fields all` 或 MCP `fields="all"`；schema 快照随契约版本更新。
 
 ### 变更（破坏性：schema_version 1.1 → 1.2）
 
@@ -67,6 +65,9 @@ JSON 契约（`schema_version`）自 M5 起冻结（当前 **1.3**）：任何�
 
 ### 变更（CLI）
 
+- **移除 metadata 汇总缓存**：`get`、`locate` 和 `search --enrich` 每次按当前字段需求执行
+  补全链，不再读写跨 provider 的元数据汇总结果；保留各 provider 的 HTTP 响应缓存和
+  `fetch` 的文件产物缓存，避免部分缓存、字段集合和单源限定造成的缓存键复杂度。
 - **缓存管理扩展**：`cache clear --all` 同时删除 KV 与 PDF/XML/文本产物；新增
   `cache gc` 清理 mapping 过期后遗留的孤立产物；`cache stats` 新增 KV/产物体积与产物
   文件数统计。`cache clear` 默认仍保留产物文件。

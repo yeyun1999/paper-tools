@@ -16,7 +16,6 @@ ArtifactFormat = Literal["pdf", "xml", "text"]
 CandidateFormat = Literal["pdf", "xml", "text", "landing"]
 
 # JSON contract version. Bump on any field change (snapshot gate + CHANGELOG).
-# Also keys the metadata cache so contract bumps invalidate stale entries.
 SCHEMA_VERSION = "1.3"
 
 _DOI_URL_PREFIXES = (

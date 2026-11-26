@@ -52,7 +52,8 @@ api_key = "YOUR_KEY"
   `authors[].name`），返回结构保持对象或数组原类型。数组为空或包含 `all` 表示返回全部
   Paper 字段；`all` 会要求补全全部字段。单次调用的 `--fields` 或 MCP `fields` 优先于配置。
 - 字段裁剪只改变输出，不会自动触发补全；`search` 仍需 `--enrich` 或 MCP `enrich=true`
-  才能填充摘要等元数据。`get` 与启用补全的 `search` 会按所选字段继续补全，缓存键也包含字段集合。
+  才能填充摘要等元数据。`get` 与启用补全的 `search` 会按所选字段继续补全；补全链不维护
+  汇总缓存，上游响应由各 provider 的 HTTP 缓存复用。
 
 ## 环境变量
 
@@ -71,8 +72,8 @@ export PAPER_TOOLS_OUTPUT__GET_FIELDS='["title", "abstract", "cited_by_count"]'
 
 ## 缓存
 
-- HTTP 响应、搜索结果和元数据使用磁盘缓存。
+- HTTP 响应和搜索结果使用磁盘缓存；补全链不再维护独立的 metadata 汇总缓存。
 - PDF/XML/text 产物按 SHA256 保存；文件映射记录最终格式和提取溯源。
 - `--no-cache` 适合排障或强制刷新。
-- `cache clear` 清理响应和元数据缓存，保留已下载产物文件。
+- `cache clear` 清理 HTTP 等 KV 缓存，保留已下载产物文件。
 - `cache stats` 查看位置、条目数和体积。
