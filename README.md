@@ -13,18 +13,18 @@
 ```bash
 uv sync --all-extras                     # 含 PDF 文本提取（pypdf）
 # Unpaywall OA 定位需要 email（官方 API 政策，一次性配置）
-uv run paper-tools config set plugins.unpaywall.email you@example.com
+paper-tools config set plugins.unpaywall.email you@example.com
 
-uv run paper-tools search "CRISPR base editing" --source pubmed --limit 10
-uv run paper-tools search "CRISPR base editing" --source europepmc --enrich
-uv run paper-tools search "CRISPR base editing" --source crossref --limit 5
-uv run paper-tools get pmid:38308006 --json          # AI 助理：稳定 JSON 输出
-uv run paper-tools locate pmcid:PMC13434336 --json  # 只定位全文链接，不下载
-uv run paper-tools download "$FULLTEXT_URL" --output title.pdf
-uv run paper-tools extract title.pdf --output title.txt # 本地 PDF/JATS XML → 纯文本
-uv run paper-tools fetch pmcid:PMC13434336 --output title.txt   # 一键：定位 → 下载 → 提取
-uv run paper-tools fetch doi:10.1093/nar/gkag769 --format pdf
-uv run paper-tools sources                            # 查看已注册插件
+paper-tools search "CRISPR base editing" --source pubmed --limit 10
+paper-tools search "CRISPR base editing" --source europepmc --enrich
+paper-tools search "CRISPR base editing" --source crossref --limit 5
+paper-tools get pmid:38308006 --json          # AI 助理：稳定 JSON 输出
+paper-tools locate pmcid:PMC13434336 --json  # 只定位全文链接，不下载
+paper-tools download "$FULLTEXT_URL" --output title.pdf
+paper-tools extract title.pdf --output title.txt # 本地 PDF/JATS XML → 纯文本
+paper-tools fetch pmcid:PMC13434336 --output title.txt   # 一键：定位 → 下载 → 提取
+paper-tools fetch doi:10.1093/nar/gkag769 --format pdf
+paper-tools sources                            # 查看已注册插件
 ```
 
 `fetch` 每次只接受一个文献标识符，仍是一键流程；需要控制处理阶段时，可依次使用 `locate`（定位链接）、`download`（下载直链）和 `extract`（提取纯文本）。`get` 支持多 ID 批量查询。`fetch` 全文默认使用安全化的文章标题作为文件名并保存到当前目录，重名时追加 DOI/PMID 等 ID；可用 `--output FILE` 指定固定文件名，未指定 `--format` 时按 `.pdf` / `.xml` / `.txt` 扩展名推断格式。
@@ -35,7 +35,7 @@ AI 助理除 `--json` CLI 外，还可挂载 MCP 服务器（stdio，四个工�
 
 ```bash
 uv sync --extra mcp
-uv run paper-tools mcp        # 挂载配置见 examples/agent-usage.md
+paper-tools mcp        # 挂载配置见 examples/agent-usage.md
 ```
 
 闭源文献不会绕过付费墙：`fetch` 返回 `FULLTEXT_UNAVAILABLE`（退出码 4）并附出版商链接。
@@ -56,7 +56,7 @@ pip install paper-tools-cli[text]        # 需要 PDF 文本提取时带上 extr
 
 ```bash
 uv sync --all-extras         # 同步环境（含 dev 依赖与 text extra）
-uv run paper-tools --help   # 运行 CLI
+uv run paper-tools --help      # 运行 CLI
 uv run pytest                # 离线测试（-m live 跑真实 API 冒烟）
 uv run ruff check .          # lint
 uv run mypy                  # 类型检查
@@ -68,7 +68,7 @@ uv run mypy                  # 类型检查
 
 ```bash
 uv pip install -e ./plugins-biorxiv      # 示例：bioRxiv/medRxiv 元数据插件
-uv run paper-tools sources --json       # metadata 角色出现 biorxiv
+paper-tools sources --json       # metadata 角色出现 biorxiv
 ```
 
 - 开发指南：[docs/plugin-guide.md](docs/plugin-guide.md)（接口、查询翻译、配置、契约测试、发布）

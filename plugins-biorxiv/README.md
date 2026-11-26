@@ -16,8 +16,8 @@ bioRxiv / medRxiv 预印本元数据插件（官方 [details API](https://api.bi
 
 ```bash
 uv pip install -e ./plugins-biorxiv     # 安装进 paper-tools 所在环境
-uv run paper-tools sources --json      # metadata 角色出现 biorxiv
-uv run paper-tools get doi:10.1101/124305 --source biorxiv --json
+paper-tools sources --json      # metadata 角色出现 biorxiv
+paper-tools get doi:10.1101/124305 --source biorxiv --json
 
 cd plugins-biorxiv
 uv sync && uv run pytest                # 独立环境：respx 回放 + 契约测试

@@ -29,7 +29,7 @@
 - [x] GitHub Actions：`uv sync --locked` → ruff → mypy → pytest（3.11/3.12/3.13 矩阵）
 - [x] README 草稿（定位、安装、合规声明）
 
-**验收**：`uv run paper-tools --help` 与 `--version` 正常；`uv run pytest` 通过；提交 `uv.lock`；CI 全绿。
+**验收**：`paper-tools --help` 与 `--version` 正常；`uv run pytest` 通过；提交 `uv.lock`；CI 全绿。
 
 ## M1 核心框架 + 五角色插件机制（1.5 周）
 
@@ -128,7 +128,7 @@
 
 ```bash
 uv sync                      # 安装/同步环境（含 dev 组）
-uv run paper-tools ...      # 运行 CLI
+paper-tools ...      # 运行 CLI
 uv run pytest                # 测试（-m live 跑真实冒烟）
 uv run ruff check . && uv run ruff format --check .
 uv run mypy src

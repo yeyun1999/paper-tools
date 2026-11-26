@@ -20,7 +20,7 @@ uv run pytest                # respx 回放 + 契约测试
 
 # 安装进主环境后自动出现在 sources：
 uv pip install -e ./plugin-template
-uv run paper-tools sources --json
+paper-tools sources --json
 ```
 
 > 注意：主环境执行 `uv sync` 会移除未写入主项目依赖的插件包；

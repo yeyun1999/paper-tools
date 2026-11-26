@@ -5,21 +5,21 @@ paper-tools 为 AI 助理提供两条通道，共享 success/error envelope 契�
 1. **JSON CLI**：任意 shell 调用 `paper-tools ... --json`，按退出码分支。
 2. **MCP 服务器**：`paper-tools mcp`（stdio），四个工具，返回同样的 envelope。
 
-所有示例均在仓库根目录、`uv sync --all-extras` 后可直接执行（`uv run` 前缀可换成已激活环境的裸命令）。
+所有示例均在仓库根目录、`uv sync --all-extras` 后可直接执行；安装后直接调用 `paper-tools`。
 
 ## 0. 一次性配置
 
 ```bash
 # Unpaywall OA 定位需要 email（官方 API 政策）
-uv run paper-tools config set plugins.unpaywall.email you@example.com
+paper-tools config set plugins.unpaywall.email you@example.com
 # 可选：Crossref/OpenAlex polite pool
-uv run paper-tools config set general.mailto you@example.com
+paper-tools config set general.mailto you@example.com
 # 可选：Semantic Scholar 无 key 共享限额很低，批量场景建议申请
-uv run paper-tools config set plugins.semantic_scholar.api_key YOUR_KEY
+paper-tools config set plugins.semantic_scholar.api_key YOUR_KEY
 # 可选：OpenAlex key（Authorization: Bearer，配后限流 5→10 req/s）
-uv run paper-tools config set plugins.openalex.api_key YOUR_KEY
+paper-tools config set plugins.openalex.api_key YOUR_KEY
 # 可选：默认 Locator 列表（空 = 全部；--locator 可临时覆盖：重复指定或逗号分隔，'all' 强制全部）
-uv run paper-tools config set fetch.locators '["pmc_oa","europepmc"]'
+paper-tools config set fetch.locators '["pmc_oa","europepmc"]'
 ```
 
 密钥只进配置/环境变量，绝不出现在日志与 JSON 输出中。
@@ -30,23 +30,23 @@ uv run paper-tools config set fetch.locators '["pmc_oa","europepmc"]'
 
 ```bash
 # 检索（浅记录，省上下文）；--enrich 补全摘要/OA 状态
-uv run paper-tools search "CRISPR base editing" --source pubmed --limit 10 --json
-uv run paper-tools search "CRISPR base editing" --source europepmc --oa-only --enrich --json
+paper-tools search "CRISPR base editing" --source pubmed --limit 10 --json
+paper-tools search "CRISPR base editing" --source europepmc --oa-only --enrich --json
 
 # 多源聚合：并发检索 + DOI 主键去重合并（identifiers 并集、sources 记录贡献源）
 # --limit 是每源返回上限；合并去重后不截断，单页结果可超过 limit
-uv run paper-tools search "CRISPR base editing" --source pubmed,europepmc --limit 10 --json
-uv run paper-tools search "Array programming with NumPy" --source all --json
+paper-tools search "CRISPR base editing" --source pubmed,europepmc --limit 10 --json
+paper-tools search "Array programming with NumPy" --source all --json
 
 # 字段裁剪：只要标题/DOI/年份（identifiers 内的键会被提升）
-uv run paper-tools search "CRISPR base editing" --fields title,doi,year --json
+paper-tools search "CRISPR base editing" --fields title,doi,year --json
 
 # 单篇完整元数据（补全链：pubmed→europepmc→crossref→openalex→s2→unpaywall）
-uv run paper-tools get pmid:38308006 --json
-uv run paper-tools get doi:10.1038/s41586-020-2649-2 --fields title,doi,abstract,oa_status --json
+paper-tools get pmid:38308006 --json
+paper-tools get doi:10.1038/s41586-020-2649-2 --fields title,doi,abstract,oa_status --json
 
 # 批量元数据：多个 ID 一次进程，NDJSON 逐行输出（单 ID 仍为单对象）
-uv run paper-tools get pmid:38308006 doi:10.1038/s41586-020-2649-2 --fields title,doi,year --json
+paper-tools get pmid:38308006 doi:10.1038/s41586-020-2649-2 --fields title,doi,year --json
 ```
 
 Paper 的 `fulltext_links` 字段自 schema 1.1 起在搜索/补全期捕获源生 OA 全文链接；
@@ -56,26 +56,26 @@ schema 1.2 将候选的 `locator` 改为来源列表，并新增有序的 `downl
 
 ```bash
 # 一键 OA 全文：pdf / xml / text（text 走 下载→提取 流水线，优先 XML）
-uv run paper-tools fetch pmcid:PMC13434336 --output papers/paper.txt --json
-uv run paper-tools fetch doi:10.1093/nar/gkag769 --format pdf --json
+paper-tools fetch pmcid:PMC13434336 --output papers/paper.txt --json
+paper-tools fetch doi:10.1093/nar/gkag769 --format pdf --json
 # 未指定 --output：当前目录使用安全化文章标题；重名追加 DOI/PMID 等 ID
 
 # 分阶段执行：定位链接 → 下载直链 → 转换本地文件
-uv run paper-tools locate pmcid:PMC13434336 --format xml --json
-uv run paper-tools download "$FULLTEXT_URL" --output papers/paper.xml --json
-uv run paper-tools extract papers/paper.xml --output papers/paper.txt --json
+paper-tools locate pmcid:PMC13434336 --format xml --json
+paper-tools download "$FULLTEXT_URL" --output papers/paper.xml --json
+paper-tools extract papers/paper.xml --output papers/paper.txt --json
 
 # 分页：取 next_cursor 原样回传续传（多源时 next_cursor 是免转义的 'ms1.' 聚合游标；
 # 单源游标是不透明字符串。多源 total 为去重前各源之和，近似值）
-uv run paper-tools search "CRISPR" --limit 20 --json          # data.next_cursor
-uv run paper-tools search "CRISPR" --limit 20 --cursor "<next_cursor>" --json
+paper-tools search "CRISPR" --limit 20 --json          # data.next_cursor
+paper-tools search "CRISPR" --limit 20 --cursor "<next_cursor>" --json
 
 # 能力发现与契约
-uv run paper-tools sources --json        # 五角色全部插件（检索/元数据/定位/下载/提取）
-uv run paper-tools schema locate        # FullTextLinks 的 JSON Schema
-uv run paper-tools schema download       # DownloadedFullText 的 JSON Schema
-uv run paper-tools schema extract        # ExtractedFullText 的 JSON Schema
-uv run paper-tools schema fetch          # FullText 的 JSON Schema
+paper-tools sources --json        # 五角色全部插件（检索/元数据/定位/下载/提取）
+paper-tools schema locate        # FullTextLinks 的 JSON Schema
+paper-tools schema download       # DownloadedFullText 的 JSON Schema
+paper-tools schema extract        # ExtractedFullText 的 JSON Schema
+paper-tools schema fetch          # FullText 的 JSON Schema
 ```
 
 成功 envelope：
@@ -104,7 +104,7 @@ uv run paper-tools schema fetch          # FullText 的 JSON Schema
 进程级错误的 error envelope 在 **stderr**；`locate` / `download` / `extract` / `fetch` / `get` 的单篇错误作为结果信封写在 **stdout**（单篇为单个 JSON 对象，批量 `get` 为 NDJSON 中的一行）。
 
 ```bash
-uv run paper-tools fetch doi:10.1001/jama.2020.2648 --format pdf --json
+paper-tools fetch doi:10.1001/jama.2020.2648 --format pdf --json
 # 退出码 4；stdout: {"error": {"code": "FULLTEXT_UNAVAILABLE", "details": {"publisher_url": "…"}}}
 ```
 
@@ -113,7 +113,7 @@ uv run paper-tools fetch doi:10.1001/jama.2020.2648 --format pdf --json
 多 ID `get` 的 `--json` 输出 NDJSON：每行一个独立 envelope（成功或错误），单 ID 失败不中断批次；进程退出码取第一个失败行的错误码。单 ID 时输出单个 JSON 对象。
 
 ```bash
-uv run paper-tools get pmid:38308006 doi:10.1000/missing --json > metadata.ndjson
+paper-tools get pmid:38308006 doi:10.1000/missing --json > metadata.ndjson
 ```
 
 逐行处理范式（Python）：
