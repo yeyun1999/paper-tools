@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from paper_tools.core.errors import UsageError
 from paper_tools.core.models import (
+    Artifact,
     Author,
+    DownloadedFullText,
+    FullText,
     FullTextCandidate,
     Paper,
     PaperSummary,
     merge_papers,
     normalize_doi,
+    normalize_license,
     parse_identifier,
 )
 
@@ -94,6 +100,79 @@ def test_parse_identifier_invalid(raw: str) -> None:
 def test_normalize_doi() -> None:
     assert normalize_doi(" HTTPS://DOI.ORG/10.1038/ABC ") == "10.1038/abc"
     assert normalize_doi("doi:10.1038/abc") == "10.1038/abc"
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("CC BY", "cc-by"),
+        (" cc by ", "cc-by"),
+        ("cc_by", "cc-by"),
+        ("CC-BY-NC-ND", "cc-by-nc-nd"),
+        ("CC BY-SA 4.0", "cc-by-sa-4.0"),
+        ("CC BY-NC-SA 4.0", "cc-by-nc-sa-4.0"),
+        ("CC0 1.0", "cc0-1.0"),
+        ("http://creativecommons.org/licenses/by/4.0", "cc-by-4.0"),
+        ("https://creativecommons.org/licenses/by-nc-nd/3.0/deed.en", "cc-by-nc-nd-3.0"),
+        ("https://creativecommons.org/publicdomain/zero/1.0/", "cc0-1.0"),
+        ("", None),
+        (" \t\n", None),
+        (None, None),
+        ("Custom License", "Custom License"),
+        ("https://example.org/license", "https://example.org/license"),
+        (
+            "https://creativecommons.org/licenses/unknown/1.0/",
+            "https://creativecommons.org/licenses/unknown/1.0/",
+        ),
+    ],
+)
+def test_normalize_license(raw: str | None, expected: str | None) -> None:
+    assert normalize_license(raw) == expected
+
+
+def test_license_normalization_applies_to_output_models() -> None:
+    candidate = FullTextCandidate(
+        url="https://example.org/paper.pdf", format="pdf", locator=["test"], license=" CC BY "
+    )
+    assert candidate.license == "cc-by"
+    assert Paper(license="cc_by").license == "cc-by"
+    assert (
+        Artifact(format="pdf", content=b"pdf", source_url=candidate.url, downloader="test").license
+        is None
+    )
+    assert (
+        Artifact(
+            format="pdf",
+            content=b"pdf",
+            source_url=candidate.url,
+            downloader="test",
+            license="CC BY",
+        ).license
+        == "cc-by"
+    )
+    assert (
+        DownloadedFullText(
+            source_url=candidate.url,
+            format="pdf",
+            path=Path("paper.pdf"),
+            sha256="hash",
+            downloader="test",
+            license="CC BY",
+        ).license
+        == "cc-by"
+    )
+    assert (
+        FullText(
+            paper=Paper(),
+            format="pdf",
+            path=Path("paper.pdf"),
+            sha256="hash",
+            source_url=candidate.url,
+            downloader="test",
+            license="CC BY",
+        ).license
+        == "cc-by"
+    )
 
 
 def test_merge_fills_missing_and_never_overwrites() -> None:

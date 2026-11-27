@@ -73,6 +73,7 @@ def test_search(plugin_ctx: PluginContext) -> None:
     assert paper.title == "CRISPR base editing in vivo"
     assert paper.identifiers["doi"] == "10.1038/abc"
     assert paper.oa_status == "gold"
+    assert paper.license == "cc-by"
     assert paper.abstract
     assert len(paper.authors) == 2
     assert paper.issn == "0028-0836"

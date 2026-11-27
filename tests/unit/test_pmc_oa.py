@@ -50,7 +50,7 @@ def test_locator_yields_direct_pdf_and_xml(plugin_ctx: PluginContext) -> None:
         (f"{XML_URL}?md5=xml-md5", "xml"),
     }
     assert all(c.locator == ["pmc_oa"] for c in candidates)
-    assert all(c.license == "CC BY-NC-ND" for c in candidates)
+    assert all(c.license == "cc-by-nc-nd" for c in candidates)
 
 
 @respx.mock

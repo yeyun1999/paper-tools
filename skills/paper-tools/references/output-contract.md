@@ -51,6 +51,8 @@
 - `locator`：发现该候选的定位器列表；同 URL+格式会合并。
 - `downloaders`：按推荐尝试顺序排列的下载器；landing 为空。
 - `Paper.fulltext_links` 是搜索/补全阶段捕获的链接；`locate.candidates` 是最终合并、排序并补充下载器推荐的结果。
+- `license` 统一为小写连字符标识（如 `cc-by`、`cc-by-nc-nd`）；已知 Creative Commons
+  URL 会转为简短标识并保留版本（如 `cc-by-4.0`）。空值为 `null`，无法识别的值保留去空格后的原文。
 
 ## Paper 文献计量字段
 

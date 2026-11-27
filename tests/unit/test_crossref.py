@@ -77,7 +77,7 @@ def test_search(plugin_ctx: PluginContext) -> None:
     assert paper.year == 2023
     assert paper.abstract == "Hello CRISPR world"
     assert paper.journal == "Nature"
-    assert paper.license == "http://creativecommons.org/licenses/by/4.0"
+    assert paper.license == "cc-by-4.0"
     assert paper.issn == "0028-0836"
     assert paper.cited_by_count == 42
     assert paper.references_count == 2

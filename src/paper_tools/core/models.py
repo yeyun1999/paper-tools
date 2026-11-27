@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Literal, cast
+from typing import Annotated, Literal, cast
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, BeforeValidator, Field
 
 from paper_tools.core.errors import UsageError
 
@@ -27,6 +27,35 @@ _DOI_URL_PREFIXES = (
 )
 _ID_PREFIXES = {"doi", "pmid", "pmcid", "openalex", "s2", "arxiv"}
 _DOI_RE = re.compile(r"^10\.\d{4,9}/\S+$")
+_CC_LICENSE_RE = re.compile(r"^cc(?:0|-by(?:-nc)?(?:-nd|-sa)?)(?:-\d+(?:\.\d+)*)?$")
+_CC_LICENSE_URL_RE = re.compile(
+    r"^https?://(?:www\.)?creativecommons\.org/licenses/"
+    r"(?P<code>by(?:-nc)?(?:-nd|-sa)?)/(?P<version>\d+(?:\.\d+)?)(?:[/?#].*)?$",
+    re.IGNORECASE,
+)
+_CC0_URL_RE = re.compile(
+    r"^https?://(?:www\.)?creativecommons\.org/publicdomain/zero/"
+    r"(?P<version>\d+(?:\.\d+)?)(?:[/?#].*)?$",
+    re.IGNORECASE,
+)
+
+
+def normalize_license(value: object) -> object:
+    """Normalize known licenses to lowercase hyphenated identifiers."""
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    if not text:
+        return None
+    if match := _CC_LICENSE_URL_RE.fullmatch(text):
+        return f"cc-{match['code'].lower()}-{match['version']}"
+    if match := _CC0_URL_RE.fullmatch(text):
+        return f"cc0-{match['version']}"
+    normalized = re.sub(r"[\s_-]+", "-", text.lower())
+    return normalized if _CC_LICENSE_RE.fullmatch(normalized) else text
+
+
+License = Annotated[str | None, BeforeValidator(normalize_license)]
 
 
 def normalize_doi(value: str) -> str:
@@ -91,7 +120,7 @@ class FullTextCandidate(BaseModel):
     format: CandidateFormat
     locator: list[str]
     downloaders: list[str] = Field(default_factory=list)
-    license: str | None = None
+    license: License = None
 
 
 def merge_candidate(base: FullTextCandidate, incoming: FullTextCandidate) -> FullTextCandidate:
@@ -123,7 +152,7 @@ class Paper(BaseModel):
     publication_type: str | None = None
     oa_status: OAStatus = "unknown"
     publisher_url: str | None = None
-    license: str | None = None
+    license: License = None
     sources: list[str] = Field(default_factory=list)
     fulltext_links: list[FullTextCandidate] = Field(default_factory=list)
     issn: str | None = None
@@ -148,7 +177,7 @@ class Artifact(BaseModel):
     content: bytes
     source_url: str
     downloader: str
-    license: str | None = None
+    license: License = None
 
 
 class FullTextLinks(BaseModel):
@@ -162,7 +191,7 @@ class DownloadedFullText(BaseModel):
     path: Path
     sha256: str
     downloader: str
-    license: str | None = None
+    license: License = None
 
 
 class ExtractedFullText(BaseModel):
@@ -181,7 +210,7 @@ class FullText(BaseModel):
     sha256: str
     source_url: str
     downloader: str
-    license: str | None = None
+    license: License = None
     extractor: str | None = None
     extracted_from: Literal["pdf", "xml"] | None = None
 
